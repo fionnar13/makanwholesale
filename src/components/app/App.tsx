@@ -526,7 +526,7 @@ export default function App() {
 
 function SidebarNav({ user, nav, view, go }: { user: SessionUser; nav: Array<{ group: string; items: NavItem[] }>; view: ViewKey; go: (v: ViewKey) => void }) {
   return (
-    <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-3 flex flex-col gap-5" aria-label="منوی اصلی">
+    <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-none py-4 px-3 flex flex-col gap-5" aria-label="منوی اصلی">
       {nav.map(g => (
         <div key={g.group}>
           <div className="px-2 pb-1.5 text-[10px] font-bold text-sidebar-foreground/50 tracking-wide">{g.group}</div>
