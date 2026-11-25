@@ -14,7 +14,7 @@
 services:
   # ─────────────────────────── وب‌سرویس Next.js ───────────────────────────
   - type: web                # سرویس وب (HTTP)
-    name: makan-store        # نام سرویس در داشبورد Render
+    name: makan-wholesale        # نام سرویس در داشبورد Render
     runtime: node            # محیط اجرا: Node.js
     plan: free               # پلن رایگان: 512MB رم — پس از ۱۵ دقیقه بی‌کاری می‌خوابد و با اولین درخواست بیدار می‌شود
     region: frankfurt        # نزدیک‌ترین ریجن Render به ایران (فرانکفورت)؛ قابل تغییر/حذف
@@ -42,7 +42,7 @@ services:
       # (اتصال داخلی هم‌ریجن — سریع، بدون SSL و بدون هزینهٔ ترافیک)
       - key: DATABASE_URL
         fromDatabase:
-          name: makan-store-db
+          name: makan-wholesale-db
           property: connectionString
 
       # Prisma در schema.prisma دو اتصال می‌خواهد:
@@ -83,7 +83,7 @@ services:
 
 # ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
 databases:
-  - name: makan-store-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
+  - name: makan-wholesale-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
     databaseName: makan_store   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
     plan: free                  # رایگان: 1GB — توجه مهم: دیتابیس رایگان Render پس از ۳۰ روز منقضی می‌شود؛
                                 # قبل از انقضا از داده‌ها بکاپ بگیرید یا به پلن paid ارتقا دهید.
