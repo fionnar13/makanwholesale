@@ -42,7 +42,7 @@ services:
       # (اتصال داخلی هم‌ریجن — سریع، بدون SSL و بدون هزینهٔ ترافیک)
       - key: DATABASE_URL
         fromDatabase:
-          name: makan-wholesale-db-2
+          name: makan-wholesale-db
           property: connectionString
 
       # Prisma در schema.prisma دو اتصال می‌خواهد:
@@ -51,7 +51,7 @@ services:
       # Render پورت pooler جداگانه ندارد؛ هر دو به همان دیتابیس داخلی اشاره می‌کنند.
       - key: DIRECT_URL
         fromDatabase:
-          name: makan-wholesale-db-2
+          name: makan-wholesale-db
           property: connectionString
 
       # نسخهٔ Node (Next.js 16 به Node ≥ 20.9 نیاز دارد)
@@ -83,8 +83,8 @@ services:
 
 # ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
 databases:
-  - name: makan-wholesale-db-2        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
-    databaseName: makan_wholesale     # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
+  - name: makan-wholesale-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
+    databaseName: makan_wholesale   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
     plan: free                  # رایگان: 1GB — توجه مهم: دیتابیس رایگان Render پس از ۳۰ روز منقضی می‌شود؛
                                 # قبل از انقضا از داده‌ها بکاپ بگیرید یا به پلن paid ارتقا دهید.
     region: frankfurt           # همان ریجن وب‌سرویس — برای اتصال داخلی سریع
