@@ -51,7 +51,7 @@ services:
       # Render پورت pooler جداگانه ندارد؛ هر دو به همان دیتابیس داخلی اشاره می‌کنند.
       - key: DIRECT_URL
         fromDatabase:
-          name: makan-store-db
+          name: makan-wholesale-db
           property: connectionString
 
       # نسخهٔ Node (Next.js 16 به Node ≥ 20.9 نیاز دارد)
@@ -84,7 +84,7 @@ services:
 # ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
 databases:
   - name: makan-wholesale-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
-    databaseName: makan_store   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
+    databaseName: makan-wholesale   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
     plan: free                  # رایگان: 1GB — توجه مهم: دیتابیس رایگان Render پس از ۳۰ روز منقضی می‌شود؛
                                 # قبل از انقضا از داده‌ها بکاپ بگیرید یا به پلن paid ارتقا دهید.
     region: frankfurt           # همان ریجن وب‌سرویس — برای اتصال داخلی سریع
