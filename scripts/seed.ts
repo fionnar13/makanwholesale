@@ -326,7 +326,7 @@ async function main() {
     const pass = u.demo ? demoPass : adminPass
     const user = await db.user.upsert({
       where: { phone: u.phone },
-      update: {},
+      update: { passwordHash: hashPassword(pass) },
       create: { phone: u.phone, name: u.name, passwordHash: hashPassword(pass), phoneVerified: true },
     })
     for (const r of u.roles) {
