@@ -9,6 +9,7 @@
  *    تصادفی تولید و در db/.initial-demo-passwords.txt ذخیره می‌شود.
  *  - هیچ رمز ثابتی داخل سورس‌کد قرار نمی‌گیرد.
  */
+import 'dotenv/config' // خواندن .env — سازگار با هر روش اجرا (npx prisma db seed / tsx / bun)؛ متغیرهای محیطی واقعی اولویت دارند
 import { PrismaClient } from '@prisma/client'
 import { randomBytes, scryptSync, randomUUID } from 'node:crypto'
 import { writeFileSync, mkdirSync } from 'node:fs'

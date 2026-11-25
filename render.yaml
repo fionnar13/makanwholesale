@@ -1,0 +1,90 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Render Blueprint — بنکداری هوشمند (Makan Store)
+# زیرساخت به‌صورت کد (Infrastructure as Code)
+#
+# نحوهٔ استفاده:
+#   1) این فایل در ریشهٔ ریپو commit و push می‌شود (همین مسیر: render.yaml)
+#   2) در Render:  Dashboard → New + → Blueprint → انتخاب ریپو از GitHub
+#   3) Render این فایل را می‌خواند و وب‌سرویس + دیتابیس را خودکار می‌سازد
+#   4) هنگام Apply، برای متغیرهای sync:false (مثل ADMIN_PASSWORD) مقدار وارد کنید
+#
+# مستندات رسمی: https://render.com/docs/blueprint-spec
+# ═══════════════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────── وب‌سرویس Next.js ───────────────────────────
+  - type: web                # سرویس وب (HTTP)
+    name: makan-store        # نام سرویس در داشبورد Render
+    runtime: node            # محیط اجرا: Node.js
+    plan: free               # پلن رایگان: 512MB رم — پس از ۱۵ دقیقه بی‌کاری می‌خوابد و با اولین درخواست بیدار می‌شود
+    region: frankfurt        # نزدیک‌ترین ریجن Render به ایران (فرانکفورت)؛ قابل تغییر/حذف
+    branch: main             # هر push به شاخه main → دیپلوی خودکار
+    autoDeploy: true
+
+    # ── دستور Build (به ترتیب اجرا) ──
+    #   1) npm install          نصب پکیج‌ها (postinstall خودش prisma generate را اجرا می‌کند)
+    #   2) npx prisma generate  تولید کلاینت Prisma از schema.prisma
+    #   3) npx prisma db push   ساخت/همگام‌سازی جداول — بدون فایل migration
+    #       (پلن رایگان Render به Pre-deploy Command دسترسی ندارد؛
+    #        به همین دلیل این دستور داخل Build Command و «قبل از بیلد» اجرا می‌شود
+    #        تا اگر پر prerender به دیتابیس نیاز داشت، جداول آماده باشند)
+    #   4) npx prisma db seed   مدیر اول + نقش‌ها/مجوزها + دادهٔ نمایشی
+    #       (Idempotent — کاربر/دادهٔ موجود را بازنویسی نمی‌کند؛ رمز فعلی حفظ می‌شود)
+    #   5) npm run build        بیلد Next.js (next build + کپی خروجی standalone)
+    buildCommand: npm install && npx prisma generate && npx prisma db push && npx prisma db seed && npm run build
+
+    # ── دستور اجرا ── npm start = cross-env NODE_ENV=production next start
+    startCommand: npm start
+
+    # ── متغیرهای محیطی ──
+    envVars:
+      # رشتهٔ اتصال، خودکار از دیتابیس تعریف‌شده در همین فایل تزریق می‌شود
+      # (اتصال داخلی هم‌ریجن — سریع، بدون SSL و بدون هزینهٔ ترافیک)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: makan-store-db
+          property: connectionString
+
+      # Prisma در schema.prisma دو اتصال می‌خواهد:
+      #   url       → DATABASE_URL  (اتصال روزمرهٔ برنامه)
+      #   directUrl → DIRECT_URL    (مایگریشن‌ها — prisma db push)
+      # Render پورت pooler جداگانه ندارد؛ هر دو به همان دیتابیس داخلی اشاره می‌کنند.
+      - key: DIRECT_URL
+        fromDatabase:
+          name: makan-store-db
+          property: connectionString
+
+      # نسخهٔ Node (Next.js 16 به Node ≥ 20.9 نیاز دارد)
+      - key: NODE_VERSION
+        value: "22"
+
+      # غیرفعال‌کردن تلمتری Next.js
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+
+      # رمز مدیر اولیه هنگام Seed — هنگام اولین Apply از شما پرسیده می‌شود؛
+      # حتماً یک مقدار واقعی وارد کنید (مثال: Admin#1404).
+      # ورود مدیر: شماره 09120000000 + همین رمز
+      # نکته: فقط هنگام «ساخته‌شدن» کاربر مدیر اعمال می‌شود؛ بعداً از خود پنل تغییرش دهید.
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # رمز کاربران نمایشی (۹ کاربر نمونه) — اگر خالی بماند رمز تصادفی ساخته می‌شود
+      - key: DEMO_USERS_PASSWORD
+        sync: false
+
+      # ورود با گوگل — اختیاری. اگر می‌خواهید فعال باشد، خطوط زیر را از کامنت خارج کنید
+      # و Client ID/Secret را از Google Cloud Console وارد کنید (Redirect URI را هم
+      # در گوگل روی https://<your-app>.onrender.com/api/auth/google/callback تنظیم کنید).
+      # - key: GOOGLE_CLIENT_ID
+      #   sync: false
+      # - key: GOOGLE_CLIENT_SECRET
+      #   sync: false
+
+# ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
+databases:
+  - name: makan-store-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
+    databaseName: makan_store   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
+    plan: free                  # رایگان: 1GB — توجه مهم: دیتابیس رایگان Render پس از ۳۰ روز منقضی می‌شود؛
+                                # قبل از انقضا از داده‌ها بکاپ بگیرید یا به پلن paid ارتقا دهید.
+    region: frankfurt           # همان ریجن وب‌سرویس — برای اتصال داخلی سریع
