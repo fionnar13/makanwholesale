@@ -84,7 +84,7 @@ services:
 # ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
 databases:
   - name: makan-wholesale-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود
-    databaseName: makan-wholesale   # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
+    databaseName: makan_wholesale  # نام واقعی دیتابیس در PostgreSQL (فقط حروف کوچک و زیرخط)
     plan: free                  # رایگان: 1GB — توجه مهم: دیتابیس رایگان Render پس از ۳۰ روز منقضی می‌شود؛
                                 # قبل از انقضا از داده‌ها بکاپ بگیرید یا به پلن paid ارتقا دهید.
     region: frankfurt           # همان ریجن وب‌سرویس — برای اتصال داخلی سریع
