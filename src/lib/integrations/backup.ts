@@ -48,6 +48,72 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
+// ── سلامت بکاپ — وضعیت رنگی پنل + مبنای هشدار اسکجولر (تابع خالص — قابل تست) ──
+
+export type BackupHealthLevel = 'OK' | 'DELAYED' | 'FAILED' | 'STALE' | 'OFF'
+export type BackupHealth = {
+  level: BackupHealthLevel
+  message: string
+  hoursSinceSuccess: number | null
+}
+
+// آستانه‌ها: بیش از ۲۴ ساعت بی‌بکاپ = قرمز؛ شکست اخیر با موفقیت تازه = زرد
+export const BACKUP_STALE_AFTER_HOURS = 24
+const FAILED_GRACE_HOURS = 12
+const DELAY_WARN_HOURS = 18
+
+export function computeBackupHealth(input: {
+  enabled: boolean
+  lastRun: { status: string; startedAt: Date } | null
+  lastSuccessAt: Date | null
+  now?: Date
+}): BackupHealth {
+  const now = input.now ?? new Date()
+  if (!input.enabled) {
+    return { level: 'OFF', message: 'بکاپ خودکار خاموش است — برای پایش وضعیت، آن را فعال کنید', hoursSinceSuccess: null }
+  }
+  const hours = input.lastSuccessAt
+    ? (now.getTime() - input.lastSuccessAt.getTime()) / 3_600_000
+    : null
+  // آخرین اجرا FAILED و از آن بعد موفقی نبوده
+  const lastFailed = input.lastRun?.status === 'FAILED'
+    && (!input.lastSuccessAt || input.lastRun.startedAt > input.lastSuccessAt)
+
+  if (hours === null || hours > BACKUP_STALE_AFTER_HOURS) {
+    return {
+      level: 'STALE',
+      message: 'بیش از ۲۴ ساعت از آخرین بکاپ موفق گذشته است — اسکجولر، cron بیرونی، پروکسی خروجی یا اتصال Google را بررسی کنید',
+      hoursSinceSuccess: hours,
+    }
+  }
+  if (lastFailed) {
+    if (hours > FAILED_GRACE_HOURS) {
+      return {
+        level: 'FAILED',
+        message: `آخرین اجرای بکاپ ناموفق بود و ${Math.round(hours)} ساعت از آخرین موفقیت می‌گذرد — پیام خطا در سابقهٔ اجرا`,
+        hoursSinceSuccess: hours,
+      }
+    }
+    return {
+      level: 'DELAYED',
+      message: `آخرین اجرا ناموفق بود ولی بکاپ موفق ${Math.round(hours)} ساعت پیش وجود دارد — پیام خطا را بررسی کنید`,
+      hoursSinceSuccess: hours,
+    }
+  }
+  if (hours > DELAY_WARN_HOURS) {
+    return {
+      level: 'DELAYED',
+      message: `${Math.round(hours)} ساعت از آخرین بکاپ موفق می‌گذرد — نزدیک مرز ۲۴ ساعت؛ احتمالاً سرویس به‌خواب رفته`,
+      hoursSinceSuccess: hours,
+    }
+  }
+  return {
+    level: 'OK',
+    message: `آخرین بکاپ موفق ${Math.round(hours)} ساعت پیش — به‌روز`,
+    hoursSinceSuccess: hours,
+  }
+}
+
 // ── اجرای بکاپ ──
 
 export type BackupRunResult = {

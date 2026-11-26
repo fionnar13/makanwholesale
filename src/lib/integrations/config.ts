@@ -85,7 +85,7 @@ export const DEFAULTS: {
   telegram: {
     botToken: null,
     chatId: '',
-    events: ['ORDER_NEW', 'BACKUP_SUCCESS', 'BACKUP_ERROR'],
+    events: ['ORDER_NEW', 'BACKUP_SUCCESS', 'BACKUP_ERROR', 'BACKUP_STALE'],
     templates: {},
   },
   ai: {

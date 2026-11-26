@@ -38,6 +38,7 @@ type Overview = {
     enabled: boolean; format: string; interval: string; hour: number; datasets: string[]; retentionCount: number; nextRunAt: string | null
     lastRun: { id: string; status: string; trigger: string; format: string; fileCount: number; sizeBytes: number; message: string | null; startedAt: string; files?: Array<{ name: string; link: string | null }> } | null
     stats: { success: number; failed: number }
+    health?: { level: 'OK' | 'DELAYED' | 'FAILED' | 'STALE' | 'OFF'; message: string; hoursSinceSuccess: number | null }
   }
   datasets: DatasetInfo[]
   telegramEvents: Array<{ key: string; label: string; description: string }>
@@ -63,6 +64,27 @@ function Guide({ title, children }: { title: string; children: React.ReactNode }
 }
 
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`
+
+// وضعیت رنگی آخرین بکاپ — سبز: موفق و به‌روز، زرد: تأخیر، قرمز: ناموفق/بیش از ۲۴ ساعت، خاکستری: خاموش
+type BackupHealthLevel = NonNullable<Overview['backup']['health']>['level']
+
+function BackupHealthBanner({ health }: { health?: Overview['backup']['health'] }) {
+  if (!health) return null
+  const map: Record<BackupHealthLevel, { label: string; cls: string; dot: string }> = {
+    OK: { label: 'به‌روز', cls: 'border-emerald-200 bg-emerald-50 text-emerald-800', dot: 'bg-emerald-500' },
+    DELAYED: { label: 'تأخیر', cls: 'border-amber-200 bg-amber-50 text-amber-800', dot: 'bg-amber-500' },
+    FAILED: { label: 'ناموفق', cls: 'border-rose-200 bg-rose-50 text-rose-800', dot: 'bg-rose-500' },
+    STALE: { label: 'متوقف (بیش از ۲۴ ساعت)', cls: 'border-rose-200 bg-rose-50 text-rose-800', dot: 'bg-rose-500' },
+    OFF: { label: 'خاموش', cls: 'border-stone-200 bg-stone-50 text-stone-600', dot: 'bg-stone-400' },
+  }
+  const s = map[health.level]
+  return (
+    <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${s.cls}`}>
+      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
+      <span><b>وضعیت آخرین بکاپ: {s.label}</b> — {health.message}</span>
+    </div>
+  )
+}
 
 export default function IntegrationsView({ user }: { user: SessionUserLike }) {
   const { data: ov, loading, reload } = useApiData<Overview>('/api/integrations')
@@ -384,6 +406,8 @@ function BackupTab({ ov, reload }: { ov: Overview; reload: () => void }) {
           <h3 className="font-bold text-sm flex items-center gap-2"><DatabaseBackup className="h-4 w-4 text-emerald-600" /> بکاپ خودکار در Google Drive</h3>
           <ConnBadge connected={Boolean(c?.enabled)} connectedText="فعال" disconnectedText="خاموش" />
         </div>
+
+        <BackupHealthBanner health={ov.backup?.health} />
 
         <Guide title="چطور کار می‌کند؟">
           <p>• داده‌های انتخابی در فرمت انتخابی به Google Drive حساب متصل‌شده آپلود می‌شود.</p>

@@ -8,6 +8,7 @@ import { getConfig, getConfigView } from '@/lib/integrations/config'
 import { DATASETS } from '@/lib/integrations/datasets'
 import { TELEGRAM_EVENTS } from '@/lib/integrations/telegram'
 import { schedulerStatus } from '@/lib/integrations/scheduler'
+import { computeBackupHealth } from '@/lib/integrations/backup'
 
 export async function GET(req: NextRequest) {
   return handler(async () => {
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
     const lastBackup = await db.backupRun.findFirst({ orderBy: { startedAt: 'desc' } })
+    const lastSuccessBackup = await db.backupRun.findFirst({ where: { status: 'SUCCESS' }, orderBy: { startedAt: 'desc' } })
     const aiLogs = await db.aiLog.count()
     const [aiErrors, backupOk, backupFailed] = await Promise.all([
       db.aiLog.count({ where: { status: 'ERROR' } }),
@@ -61,6 +63,12 @@ export async function GET(req: NextRequest) {
           files: lastBackup.driveLinksJson ? JSON.parse(lastBackup.driveLinksJson) : null,
         } : null,
         stats: { success: backupOk, failed: backupFailed },
+        // وضعیت رنگی آخرین بکاپ برای پنل — سبز/زرد/قرمز/خاکستری
+        health: computeBackupHealth({
+          enabled: Boolean(backup.enabled),
+          lastRun: lastBackup ? { status: lastBackup.status, startedAt: lastBackup.startedAt } : null,
+          lastSuccessAt: lastSuccessBackup?.startedAt ?? null,
+        }),
         aiLogs: { total: aiLogs, errors: aiErrors },
         scheduler: schedulerStatus(),
       },
