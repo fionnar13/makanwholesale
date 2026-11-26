@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // کتابخانه‌های سمت سرور یکپارچه‌سازی‌ها — از bundle شدن خروجی standalone خارج می‌شوند
+  serverExternalPackages: ["google-auth-library", "exceljs"],
 };
 
 export default nextConfig;

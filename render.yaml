@@ -81,6 +81,17 @@ services:
       # - key: GOOGLE_CLIENT_SECRET
       #   sync: false
 
+      # کلید رمزنگاری مقادیر حساس یکپارچه‌سازی‌ها (توکن گوگل، تلگرام، کلید AI) —
+      # هنگام Apply یک مقدار تصادفی حداقل ۳۲ کاراکتری وارد کنید (مثال: openssl rand -base64 32).
+      # این کلید پس از تغییر، مقادیر حساس قبلی قابل بازگشایی نیستند.
+      - key: INTEGRATION_SECRET_KEY
+        sync: false
+
+      # اسکجولر داخلی (بکاپ خودکار و همگام‌سازی Sheets) — روی سرویس Node فعال است؛
+      # اگر نمی‌خواهید، مقدار ۱ بدهید و به‌جایش cron بیرونی به /api/integrations/scheduler/tick وصل کنید
+      # - key: INTEGRATIONS_SCHEDULER_DISABLED
+      #   value: "1"
+
 # ─────────────────────────── دیتابیس PostgreSQL ───────────────────────────
 databases:
   - name: makan-wholesale-db        # نام ریسورس در Render — envVars بالا با همین نام وصل می‌شود

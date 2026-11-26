@@ -5,6 +5,7 @@ import { ApiError } from '@/lib/api'
 import { nextNumber } from '@/lib/numbering'
 import { resolveOrderPrices } from '@/lib/pricing'
 import { reserveStockAtomic, releaseStockAtomic, issueStockFEFO, customerBalance, checkLowStock } from '@/lib/inventory'
+import { emitTelegramEvent } from '@/lib/integrations/telegram'
 import { audit } from '@/lib/audit'
 import { notifyPermissionCodes, notifyUser } from '@/lib/notify'
 
@@ -181,6 +182,12 @@ export async function createOrder(
     body: `سفارش ${order.orderNo} برای «${customer.shopName}» به مبلغ ${totalRls.toLocaleString('fa-IR')} ریال`,
     refType: 'ORDER', refId: order.id,
   })
+  // یکپارچه‌سازی‌ها — رویداد تلگرام سفارش جدید (اگر فعال باشد؛ هرگز جریان اصلی را نمی‌شکند)
+  await emitTelegramEvent('ORDER_NEW', {
+    orderNo: order.orderNo,
+    customerName: customer.shopName,
+    total: totalRls.toLocaleString('fa-IR'),
+  })
   return { order, idempotent: false }
 }
 
@@ -356,6 +363,12 @@ export async function transitionOrder(
           type: 'LOW_STOCK', title: 'هشدار کم‌موجودی',
           body: `«${low.productName}» به نقطه سفارش رسید (قابل فروش: ${low.availableBase})`,
           refType: 'PRODUCT', refId: low.productId,
+        })
+        // یکپارچه‌سازی‌ها — رویداد تلگرام کم‌موجودی
+        await emitTelegramEvent('LOW_STOCK', {
+          productName: low.productName,
+          available: low.availableBase,
+          reorderPoint: low.reorderPoint,
         })
       }
     }

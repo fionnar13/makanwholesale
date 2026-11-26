@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Bell, Building2, ClipboardList, FileClock, ImagePlus, LayoutDashboard, LogOut, Map, MessageSquare,
-  Menu, Package, Receipt, RotateCcw, Search, Store, Truck, UserCog, Warehouse, BarChart3, Smartphone, Database,
+  Menu, Package, Receipt, RotateCcw, Search, Store, Truck, UserCog, Warehouse, BarChart3, Smartphone, Database, Plug,
 } from 'lucide-react'
 import { apiFetch, JDate, useApiData, StatusBadge, SiteIdentity, UserAvatar, LogoImg, SITE_CHANGED_EVENT } from './kit'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ import UsersView from './UsersView'
 import TerritoriesView from './TerritoriesView'
 import AuditView from './AuditView'
 import AdminDataView from './AdminDataView'
+import IntegrationsView from './IntegrationsView'
 import VisitorApp from './VisitorApp'
 import StorefrontView from './StorefrontView'
 import ProfileAvatarDialog from './ProfileAvatarDialog'
@@ -49,7 +50,7 @@ export type SessionUser = {
 export type ViewKey =
   | 'dashboard' | 'orders' | 'customers' | 'catalog' | 'storefront' | 'inventory' | 'suppliers'
   | 'finance' | 'returns' | 'visits' | 'reports' | 'messages' | 'users'
-  | 'territories' | 'audit' | 'visitor' | 'admin-data'
+  | 'territories' | 'audit' | 'visitor' | 'admin-data' | 'integrations'
 
 type NavItem = { key: ViewKey; label: string; icon: typeof Bell; perm?: string; roles?: string[]; tone?: keyof typeof ICON_TONE }
 
@@ -103,6 +104,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { key: 'messages', label: 'پیام‌ها', icon: MessageSquare, perm: 'messages.use', tone: 'sky' },
       { key: 'admin-data', label: 'پنل مدیریت داده‌ها', icon: Database, perm: 'users.manage', tone: 'amber' },
+      { key: 'integrations', label: 'تنظیمات یکپارچه‌سازی', icon: Plug, perm: 'users.manage', tone: 'emerald' },
       { key: 'users', label: 'کاربران و نقش‌ها', icon: UserCog, perm: 'users.manage', tone: 'violet' },
       { key: 'audit', label: 'سوابق سیستم', icon: FileClock, perm: 'audit.view', tone: 'stone' },
     ],
@@ -127,6 +129,7 @@ const VIEW_TITLES: Record<ViewKey, string> = {
   audit: 'سوابق سیستم',
   visitor: 'اپ ویزیتور',
   'admin-data': 'پنل مدیریت داده‌ها',
+  integrations: 'تنظیمات یکپارچه‌سازی',
 }
 
 type SearchResult = {
@@ -317,6 +320,7 @@ export default function App() {
       case 'territories': return <TerritoriesView user={user} />
       case 'audit': return <AuditView user={user} />
       case 'admin-data': return <AdminDataView user={user} go={go} />
+      case 'integrations': return <IntegrationsView user={user} />
       case 'visitor': return <VisitorApp user={user} go={go} />
       default: return <DashboardView user={user} go={go} />
     }

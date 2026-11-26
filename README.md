@@ -87,7 +87,8 @@ bun run dev        # http://localhost:3000
 │   ├── products/       # تصاویر محصولات فروشگاه
 │   └── uploads/        # لوگو، فاوآیکون و تصاویر پروفایل (در رانتایم)
 ├── docs/
-│   └── postgres-migration.md  # راهنمای کامل PG: استقرار، مهاجرت داده، Rollback
+│   ├── postgres-migration.md  # راهنمای کامل PG: استقرار، مهاجرت داده، Rollback
+│   └── integrations.md        # راهنمای یکپارچه‌سازی‌ها: Drive/Sheets/تلگرام/AI
 ├── Dockerfile · docker-compose.yml (با سرویس postgres:16-alpine) · ecosystem.config.js · Caddyfile
 └── راهنمای-نصب-و-راه-اندازی.md
 ```

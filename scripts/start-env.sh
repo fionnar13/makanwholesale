@@ -8,7 +8,7 @@ node /home/z/my-project/scripts/pg-local.mjs
 
 # ۲) سرور وب — اگر روی پورت ۳۰۰۰ چیزی پاسخ نمی‌دهد، به‌صورت دیمن راه‌اندازی کن
 if ! curl -s -o /dev/null --max-time 3 http://127.0.0.1:3000/; then
-  env -u DATABASE_URL -u DIRECT_URL start-stop-daemon --start --background \
+  env -u DATABASE_URL -u DIRECT_URL INTEGRATION_SECRET_KEY="dev-smoke-key-1234567890abcdef" start-stop-daemon --start --background \
     --make-pidfile --pidfile /tmp/bwh-dev.pid \
     --startas /usr/local/bin/bun --chdir /home/z/my-project --no-close \
     -- run dev > /tmp/bwh-dev-out.log 2>&1

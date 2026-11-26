@@ -648,3 +648,80 @@ model Banner {
 
   @@index([isActive, sortOrder])
 }
+
+// ───────────────────────────── Integrations ──────────────────────────────────
+// تنظیمات یکپارچه‌سازی‌های خارجی (Google Drive/Sheets، تلگرام، هوش مصنوعی، بکاپ)
+// مقادیر حساس قبل از ذخیره با AES-256-GCM رمزنگاری می‌شوند (src/lib/integrations/crypto.ts)
+
+// پیکربندی هر یکپارچه‌سازی — dataJson شامل تنظیمات؛ فیلدهای حساس با پیشوند enc.v1 رمز شده‌اند
+model IntegrationConfig {
+  key       String   @id // google | sheets | telegram | ai | backup
+  dataJson  String
+  updatedAt DateTime @updatedAt
+}
+
+// حساب‌های گوگل متصل‌شده (OAuth 2.0 شخصی) — توکن‌ها رمزنگاری‌شده ذخیره می‌شوند
+model GoogleAccount {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  displayName    String?
+  picture        String?
+  accessToken    String?   // رمز شده (enc.v1)
+  refreshToken   String?   // رمز شده (enc.v1)
+  tokenExpiresAt DateTime?
+  scope          String?
+  isBackupTarget Boolean   @default(false) // مقصد بکاپ خودکار (حساب مرکزی مدیر)
+  isActive       Boolean   @default(true)
+  connectedById  String?   // کاربری که این حساب را متصل کرده
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// سابقه اجرای بکاپ‌های خودکار/دستی
+model BackupRun {
+  id              String    @id @default(cuid())
+  status          String    @default("RUNNING") // RUNNING | SUCCESS | FAILED
+  trigger         String    @default("MANUAL") // MANUAL | SCHEDULED
+  format          String // JSON | CSV | XLSX | TS
+  target          String    @default("DRIVE") // DRIVE | LOCAL_DOWNLOAD
+  scopeJson       String // دیتاست‌های انتخابی
+  fileCount       Int       @default(0)
+  sizeBytes       Int       @default(0)
+  driveLinksJson  String? // [{fileId, name, link}]
+  message         String? // پیام موفقیت/خطا
+  durationMs      Int?
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  startedById     String?
+
+  @@index([startedAt])
+}
+
+// لاگ درخواست/پاسخ هوش مصنوعی — بدون ذخیره اطلاعات حساس
+model AiLog {
+  id            String   @id @default(cuid())
+  provider      String
+  model         String
+  purpose       String // ASSISTANT | SUMMARIZE | CATEGORIZE
+  status        String // SUCCESS | ERROR
+  promptChars   Int      @default(0)
+  responseChars Int      @default(0)
+  latencyMs     Int?
+  error         String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// لاگ عمومی یکپارچه‌سازی‌ها (Sheets همگام‌سازی، تلگرام، بکاپ، اسکجولر)
+model IntegrationLog {
+  id          String   @id @default(cuid())
+  integration String // google | sheets | telegram | ai | backup | scheduler
+  level       String   @default("INFO") // INFO | WARN | ERROR
+  event       String
+  message     String?
+  dataJson    String?
+  createdAt   DateTime @default(now())
+
+  @@index([integration, createdAt])
+}

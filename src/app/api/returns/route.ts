@@ -6,6 +6,7 @@ import { ApiError, handler, ok, parseBody } from '@/lib/api'
 import { requirePerm } from '@/lib/auth'
 import { nextNumber } from '@/lib/numbering'
 import { notifyPermissionCodes } from '@/lib/notify'
+import { emitTelegramEvent } from '@/lib/integrations/telegram'
 import { audit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
   return handler(async () => {
     const user = await requirePerm(req, 'orders.create')
     const body = await parseBody(req, createSchema)
-    const order = await db.order.findUnique({ where: { id: body.orderId }, include: { items: true } })
+    const order = await db.order.findUnique({ where: { id: body.orderId }, include: { items: true, customer: { select: { shopName: true } } } })
     if (!order) throw new ApiError(404, 'NOT_FOUND', 'سفارش یافت نشد')
     if (!['DELIVERED', 'COMPLETED'].includes(order.status)) {
       throw new ApiError(409, 'BAD_STATE', 'مرجوعی فقط برای سفارش تحویل‌شده امکان‌پذیر است')
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       body: `درخواست ${created.returnNo} بابت سفارش ${order.orderNo} ثبت شد`,
       refType: 'RETURN', refId: created.id,
     })
+    await emitTelegramEvent('RETURN_NEW', { returnNo: created.returnNo, customerName: order.customer?.shopName ?? '' })
     return ok({ id: created.id, returnNo: created.returnNo }, 201)
   })
 }
