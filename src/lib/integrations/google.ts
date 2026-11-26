@@ -6,6 +6,7 @@ import { OAuth2Client } from 'google-auth-library'
 import { db } from '@/lib/db'
 import { decryptValue, encryptValue } from './crypto'
 import { integrationLog } from './logs'
+import { proxyFetch } from './proxy'
 
 export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 
@@ -54,7 +55,7 @@ export async function getValidAccessToken(account: AccountRow): Promise<string> 
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || (await dbSetting('auth.google.clientSecret'))
   if (!clientId || !clientSecret) throw new Error('پیکربندی OAuth گوگل (Client ID/Secret) یافت نشد')
 
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await proxyFetch('GOOGLE', 'https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -141,7 +142,7 @@ export async function driveUploadFile(
     bodyBuf,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ])
-  const res = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&supportsAllDrives=true`, {
+  const res = await proxyFetch('GOOGLE', `${DRIVE_UPLOAD_URL}?uploadType=multipart&supportsAllDrives=true`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -163,21 +164,21 @@ export async function driveListBackups(accessToken: string, folderId: string | n
   const q = ["appProperties has { key='makanBackup' and value='1' }"]
   if (folderId) q.push(`'${folderId}' in parents`)
   const params = new URLSearchParams({ q: q.join(' and '), orderBy: 'createdTime desc', pageSize: '100', fields: 'files(id,name,createdTime)', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' })
-  const res = await fetch(`${DRIVE_FILES_URL}?${params}`, { headers: { authorization: `Bearer ${accessToken}` } })
+  const res = await proxyFetch('GOOGLE', `${DRIVE_FILES_URL}?${params}`, { headers: { authorization: `Bearer ${accessToken}` } })
   if (!res.ok) throw new Error(`خواندن فهرست Drive ناموفق بود (${res.status})`)
   const json = (await res.json()) as { files: Array<{ id: string; name: string; createdTime: string }> }
   return json.files ?? []
 }
 
 export async function driveDeleteFile(accessToken: string, fileId: string): Promise<void> {
-  const res = await fetch(`${DRIVE_FILES_URL}/${fileId}?supportsAllDrives=true`, { method: 'DELETE', headers: { authorization: `Bearer ${accessToken}` } })
+  const res = await proxyFetch('GOOGLE', `${DRIVE_FILES_URL}/${fileId}?supportsAllDrives=true`, { method: 'DELETE', headers: { authorization: `Bearer ${accessToken}` } })
   if (!res.ok && res.status !== 404) throw new Error(`حذف فایل Drive ناموفق بود (${res.status})`)
 }
 
 // ── Sheets ──
 
 export async function sheetsGetValues(accessToken: string, spreadsheetId: string, range: string): Promise<string[][]> {
-  const res = await fetch(`${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS`, {
+  const res = await proxyFetch('GOOGLE', `${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS`, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
   if (!res.ok) {
@@ -190,7 +191,7 @@ export async function sheetsGetValues(accessToken: string, spreadsheetId: string
 
 export async function sheetsWriteValues(accessToken: string, spreadsheetId: string, range: string, values: string[][], mode: 'WRITE' | 'APPEND'): Promise<number> {
   const params = new URLSearchParams({ valueInputOption: 'USER_ENTERED', insertDataOption: mode === 'APPEND' ? 'INSERT_ROWS' : 'OVERWRITE' })
-  const res = await fetch(`${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?${params}`, {
+  const res = await proxyFetch('GOOGLE', `${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?${params}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
     body: JSON.stringify({ values, majorDimension: 'ROWS' }),
@@ -205,7 +206,7 @@ export async function sheetsWriteValues(accessToken: string, spreadsheetId: stri
 
 /** آزمایش دسترسی به Spreadsheet — خطای خوانا برای راهنمای کاربر */
 export async function sheetsCheckAccess(accessToken: string, spreadsheetId: string): Promise<{ ok: true; title: string; sheets: string[] } | { ok: false; error: string }> {
-  const res = await fetch(`${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}?fields=properties.title,sheets.properties.title`, {
+  const res = await proxyFetch('GOOGLE', `${SHEETS_BASE_URL}/${encodeURIComponent(spreadsheetId)}?fields=properties.title,sheets.properties.title`, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
   if (!res.ok) {

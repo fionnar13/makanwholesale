@@ -2,6 +2,7 @@
 // توکن بات از @BotFather؛ ارسال با Bot API رسمی (sendMessage / sendDocument)
 import { getConfig } from './config'
 import { integrationLog } from './logs'
+import { proxyFetch } from './proxy'
 
 export const TELEGRAM_EVENTS: Array<{ key: string; label: string; description: string }> = [
   { key: 'ORDER_NEW', label: 'ثبت سفارش جدید', description: 'به‌محض ثبت هر سفارش جدید پیام ارسال می‌شود' },
@@ -33,7 +34,7 @@ export function renderTemplate(template: string, data: Record<string, string | n
 export type TelegramSendResult = { ok: true; messageId: number } | { ok: false; error: string }
 
 async function botCall(token: string, method: string, body: FormData | string): Promise<{ ok: boolean; result?: unknown; description?: string }> {
-  const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`, {
+  const res = await proxyFetch('TELEGRAM', `https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`, {
     method: 'POST',
     ...(typeof body === 'string'
       ? { headers: { 'content-type': 'application/json' }, body }

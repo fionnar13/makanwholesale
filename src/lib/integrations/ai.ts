@@ -2,6 +2,7 @@
 // ادمین بدون تغییر کد، ارائه‌دهنده/Base URL/کلید/مدل را از پنل عوض می‌کند
 import { getConfig } from './config'
 import { db } from '@/lib/db'
+import { proxyFetch } from './proxy'
 
 export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -24,7 +25,7 @@ export async function aiChat(messages: AiMessage[], purpose: string): Promise<Ai
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`
   const started = Date.now()
   try {
-    const res = await fetch(url, {
+    const res = await proxyFetch('AI', url, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${cfg.apiKey}`,
