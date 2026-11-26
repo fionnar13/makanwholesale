@@ -12,7 +12,11 @@
     "db:migrate-data": "tsx scripts/migrate-sqlite-to-postgres.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:integrations",
+    "test": "npm run test:unit",
+    "test:unit": "node --import tsx --test tests/unit/*.test.mts",
+    "test:integration": "node --import tsx --test tests/integration/*.test.mts",
+    "test:all": "npm run test:unit && npm run test:integration",
+    "smoke": "bash scripts/smoke.sh",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -20,8 +24,7 @@
     "db:status": "prisma migrate status",
     "db:local": "node scripts/pg-local.mjs",
     "db:local:seed": "node scripts/pg-local.mjs --seed",
-    "db:reset": "prisma migrate reset",
-    "test:integrations": "node --import tsx --test tests/integrations/*.test.mts"
+    "db:reset": "prisma migrate reset"
   },
   "prisma": {
     "seed": "tsx scripts/seed.ts"

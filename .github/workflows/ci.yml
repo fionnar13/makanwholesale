@@ -1,5 +1,6 @@
 # CI پروژه Makan Store — اجرا روی هر push و pull request به main
-# مراحل: نصب → typecheck → lint → آماده‌سازی PostgreSQL موقت → test → build
+# مراحل: نصب → typecheck → lint → تست واحد (بدون دیتابیس) → PostgreSQL موقت →
+#        تست یکپارچه → build → seed → سرور پروداکشن → تست دود (smoke.sh)
 name: CI
 
 on:
@@ -12,12 +13,14 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
-    # DATABASE_URL برای همه مراحل — تست‌های وابسته به دیتابیس و build به آن نیاز دارند
+    # DATABASE_URL برای مراحل دیتابیسی — تست‌های یکپارچه، build و smoke
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/makan_test
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/makan_test
+      ADMIN_PASSWORD: Admin#1404        # رمزهای مورد انتظار smoke.sh
+      DEMO_USERS_PASSWORD: Demo#1404
 
-    # PostgreSQL موقت برای تست‌های یکپارچه — پس از پایان job از بین می‌رود
+    # PostgreSQL موقت برای تست‌های یکپارچه و smoke — پس از پایان job از بین می‌رود
     services:
       postgres:
         image: postgres:16
@@ -53,13 +56,35 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # ساخت اسکیمای دیتابیس موقت برای تست‌های وابسته به PostgreSQL
+      # تست‌های واحد — hermetic، بدون نیاز به دیتابیس
+      - name: Unit tests
+        run: npm run test:unit
+
+      # ساخت اسکیمای دیتابیس موقت برای تست‌های یکپارچه
       - name: Prepare test database
         run: npx prisma db push --skip-generate
 
-      - name: Test
-        run: npm test
+      # تست‌های وابسته به دیتابیس (لایه AI، جریان سفارش ویزیتور)
+      - name: Integration tests
+        run: npm run test:integration
 
       # build بدون ignoreBuildErrors — خطای تایپ جدید CI را قرمز می‌کند
       - name: Build
         run: npm run build
+
+      # داده‌های اولیه برای تست دود (اعداد smoke.sh به seed تازه وابسته‌اند)
+      - name: Seed database
+        run: npm run db:seed
+
+      - name: Start production server
+        run: |
+          nohup npm run start:standalone > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api > /dev/null || (cat /tmp/server.log && exit 1)
+
+      # تست دود کامل — ۳۶+ چک روی سناریوهای حیاتی (شامل جریان سفارش ویزیتور)
+      - name: Smoke test
+        run: bash scripts/smoke.sh

@@ -197,7 +197,7 @@ check "uploaded image converted to webp" '.webp' "$UP"
 UP_URL=$(echo "$UP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['url'])" 2>/dev/null || true)
 if [ -n "$UP_URL" ] && [[ "$UP_URL" == *.webp ]] && [ -f "public$UP_URL" ]; then
   check "webp file exists on disk" 'webp' "public$UP_URL"
-  CT=$(curl -s -I "$BASE$UP_URL" | rg -i '^content-type' | tr -d '\r')
+  CT=$(curl -s -I "$BASE$UP_URL" | grep -i '^content-type' | tr -d '\r')
   check "served as image/webp" 'image/webp' "$CT"
   rm -f "public$UP_URL" # پاکسازی فایل تست
 else
