@@ -50,8 +50,9 @@
 
 ## ۳) نتایج واقعی تست‌ها
 
-- **تست‌های واحد/یکپارچه (node:test):** ۲۷/۲۷ PASS با PostgreSQL موقت — crypto، exporters/importers (CSV/XLSX/JSON/TS)، الگوهای تلگرام، اسکجولر بکاپ، لایه AI. در CI (GitHub Actions) با PostgreSQL موقت روی هر push اجرا می‌شود.
-- **تست دود کامل (scripts/smoke.sh):** ۳۶/۳۶ PASS — سناریوهای حیاتی زیر.
+- **تست‌های واحد (node:test — بدون دیتابیس):** ۳۳/۳۳ PASS — crypto، exporters/importers (CSV/XLSX/JSON/TS)، الگوهای تلگرام و اسکجولر بکاپ، پارس AI، سلامت بکاپ. در CI روی هر push اجرا می‌شود.
+- **تست‌های یکپارچه (با PostgreSQL):** ۶/۶ PASS — لایه AI (پیکربندی/snapshot) و جریان حیاتی سفارش ویزیتور (ثبت مشتری → سفارش → Idempotency → scoping → مشاهده مدیر). در CI با PostgreSQL موقت اجرا می‌شود.
+- **تست دود کامل (scripts/smoke.sh):** ۶۵/۶۵ PASS روی سرور standalone با seed تازه — سناریوهای حیاتی زیر + جریان فروشگاه ویزیتور، WebP و گرادیانت موبایل.
 
 **سناریوهای حیاتی سند پروژه:**
 - ✅ سناریو ۱ (ضد Overselling): دو سفارش هم‌زمان از موجودی محدود → دقیقاً یکی رزرو قطعی می‌شود، دیگری `INSUFFICIENT_STOCK 409`
