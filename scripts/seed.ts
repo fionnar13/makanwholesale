@@ -326,7 +326,9 @@ async function main() {
     const pass = u.demo ? demoPass : adminPass
     const user = await db.user.upsert({
       where: { phone: u.phone },
-      update: { passwordHash: hashPassword(pass) },
+      // توجه: در هر اجرای seed فقط کاربران جدید ساخته می‌شوند؛ رمز کاربران موجود
+      // هرگز بازنویسی نمی‌شود تا اجرای seed روی محیط واقعی، دسترسی‌ها را نشکند.
+      update: {},
       create: { phone: u.phone, name: u.name, passwordHash: hashPassword(pass), phoneVerified: true },
     })
     for (const r of u.roles) {
