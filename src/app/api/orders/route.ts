@@ -12,16 +12,18 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const status = url.searchParams.get('status')
     const customerId = url.searchParams.get('customerId')
-    const mine = url.searchParams.get('mine') === '1' || url.searchParams.get('mine') === 'true'
     const from = url.searchParams.get('from')
     const to = url.searchParams.get('to')
     const take = Math.min(parseInt(url.searchParams.get('take') ?? '100', 10), 300)
+
+    // ویزیتور میدانی (ثبت سفارش بدون مجوز تأیید) فقط سفارش‌های خودش را می‌بیند
+    const isFieldSeller = user.permissions.includes('orders.create') && !user.permissions.includes('orders.confirm')
 
     const orders = await db.order.findMany({
       where: {
         ...(status ? { status } : {}),
         ...(customerId ? { customerId } : {}),
-        ...(mine && user.permissions.includes('orders.create') && !user.permissions.includes('orders.confirm') ? { visitorId: user.id } : {}),
+        ...(isFieldSeller ? { OR: [{ visitorId: user.id }, { createdById: user.id }] } : {}),
         ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
       },
       include: { customer: { select: { code: true, shopName: true } }, _count: { select: { items: true } } },

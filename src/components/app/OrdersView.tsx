@@ -92,6 +92,7 @@ export default function OrdersView({ user }: { user: SessionUserLike }) {
                 { key: 'items', header: 'اقلام', cell: (o: OrderListItem) => <span className="text-xs">{formatFaNumber(o.itemsCount)} قلم / {formatFaNumber(o.itemsCountBase)} پایه</span> },
                 { key: 'status', header: 'وضعیت', cell: (o: OrderListItem) => <StatusBadge status={o.status} label={o.statusLabel} /> },
                 { key: 'visitor', header: 'ویزیتور', cell: (o: OrderListItem) => <span className="text-xs text-muted-foreground">{o.visitor ?? '—'}</span> },
+                { key: 'createdBy', header: 'ثبت‌کننده', cell: (o: OrderListItem) => <span className="text-xs text-muted-foreground">{o.createdBy ?? '—'}</span> },
                 { key: 'createdAt', header: 'زمان', cell: (o: OrderListItem) => <span className="text-xs"><JDate d={o.createdAt} time /></span> },
                 {
                   key: 'actions', header: '', cell: (o: OrderListItem) => (
@@ -228,7 +229,8 @@ function OrderDetailDialog({ orderId, onClose, onChanged, user }: {
                 {d.payMethod === 'CREDIT' && <Badge variant="outline">اعتباری</Badge>}
               </DialogTitle>
               <DialogDescription>
-                {d.customer.shopName} {d.branch ? `— شعبه ${d.branch.name}` : ''} | ثبت‌کننده: {d.createdBy ?? '—'} | <JDate d={d.createdAt} time />
+                {d.customer.shopName} {d.branch ? `— شعبه ${d.branch.name}` : ''} | ثبت‌کننده: {d.createdBy ?? '—'}
+                {d.visitor ? <> | ویزیتور: {d.visitor}</> : ''} | <JDate d={d.createdAt} time />
               </DialogDescription>
             </DialogHeader>
 

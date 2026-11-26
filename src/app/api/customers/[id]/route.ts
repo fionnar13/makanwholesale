@@ -10,7 +10,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(req: NextRequest, ctx: Ctx) {
   return handler(async () => {
-    await requirePerm(req, 'customers.view')
+    const user = await requirePerm(req, 'customers.view')
     const { id } = await ctx.params
     const c = await db.customer.findUnique({
       where: { id },
@@ -23,6 +23,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       },
     })
     if (!c) throw new ApiError(404, 'NOT_FOUND', 'مشتری یافت نشد')
+
+    // ویزیتور میدانی فقط پروندهٔ مشتریان مرتبط به خودش را می‌بیند
+    const isManager = user.permissions.includes('customers.manage')
+    if (!isManager && c.salesRepId !== user.id && c.createdById !== user.id) {
+      throw new ApiError(403, 'FORBIDDEN', 'این پروندهٔ مشتری متعلق به شما نیست')
+    }
 
     const balanceRls = (await db.customerLedger.aggregate({ where: { customerId: id }, _sum: { amountRls: true } }))._sum.amountRls ?? 0
     const totalPurchases = (await db.order.aggregate({ where: { customerId: id, status: { in: ['DELIVERED', 'COMPLETED'] } }, _sum: { totalRls: true } }))._sum.totalRls ?? 0

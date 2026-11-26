@@ -2,13 +2,15 @@
 // فروشگاه محصولات — نمای فروشگاهیِ کاتالوگ برای نمایش بهترین شکل محصولات به مشتری
 // همان لیستی که ویزیتور می‌بیند و به مشتری نشان می‌دهد؛ مدیر سیستم و آدمین نیز همین نما را می‌بینند
 // امکانات: جستجو، فیلتر دسته‌بندی و برند (برندها وابسته به دسته‌بندی)، مرتب‌سازی،
-// کارت محصول با قیمت عمومی و موجودی زنده، مشاهده جزئیات و مقایسه تا ۴ محصول
-import { useMemo, useState } from 'react'
+// کارت محصول با قیمت عمومی و موجودی زنده، مشاهده جزئیات و مقایسه تا ۴ محصول،
+// و برای دارندهٔ مجوز orders.create: سبد خرید و ثبت سفارش برای مشتری (StoreOrderCart)
+import { useEffect, useMemo, useState } from 'react'
 import { ErrorState, Money, formatFaNumber, useApiData, type SiteIdentity } from './kit'
 import { COMPARE_MAX, ProductTile, stockInfo, type StoreMeta } from './StoreShared'
 import CompareDialog from './StoreCompare'
 import StoreHero from './StoreHero'
-import type { ProductListItem } from './types'
+import StoreOrderCart, { type CartItem } from './StoreOrderCart'
+import type { ProductListItem, SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,12 +19,13 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Eye, GitCompareArrows, PackageX, RefreshCw, Scale, Search, Store, Trash2, X } from 'lucide-react'
+import { Eye, GitCompareArrows, PackageX, RefreshCw, Scale, Search, ShoppingBasket, Store, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 const COMPARE_HINT = 'حداکثر ۴ محصول هم‌زمان قابل مقایسه است'
+const CART_STORAGE_KEY = 'bwh-storefront-cart'
 
-export default function StorefrontView() {
+export default function StorefrontView({ user }: { user?: SessionUserLike }) {
   const { data, loading, error, reload } = useApiData<ProductListItem[]>('/api/products')
   const { data: meta } = useApiData<StoreMeta>('/api/products?meta=1')
   // بنرهای هیرو از تنظیمات وب‌سایت (مدیریت از پنل مدیریت → بنرهای فروشگاه)
@@ -36,6 +39,19 @@ export default function StorefrontView() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
+
+  // ─── سبد خرید ویزیتور — در sessionStorage زنده می‌ماند (بازخوانی صفحه سبد را نمی‌بندد) ───
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(sessionStorage.getItem(CART_STORAGE_KEY) ?? '[]') as CartItem[] } catch { return [] }
+  })
+  const [cartOpen, setCartOpen] = useState(false)
+  useEffect(() => {
+    try { sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart)) } catch { /* ignore */ }
+  }, [cart])
+
+  // فقط دارندهٔ مجوز ثبت سفارش (ویزیتور/مدیر) سبد و دکمه‌های افزودن را می‌بیند
+  const canOrder = !!user?.permissions?.includes('orders.create')
 
   // جستجو و فیلتر فعال — پایه شمارش دسته‌ها و مرتب‌سازی
   const baseList = useMemo(() => {
@@ -98,6 +114,35 @@ export default function StorefrontView() {
     })
   }
 
+  // ─── افزودن به سبد — ادغام با خط موجود، کنترل موجودی قابل فروش ───
+  const addToCart = (p: ProductListItem, unitId?: string, qty = 1) => {
+    const unit = (unitId ? p.units.find(u => u.id === unitId) : null)
+      ?? p.units.find(u => !u.isBase && u.defaultPriceRls != null) // پیش‌فرض: کارتن (عمده)
+      ?? p.units.find(u => !u.isBase)
+      ?? p.units[0]
+    if (!unit) { toast.error('واحد فروشی برای این محصول ثبت نشده است'); return }
+    const addQty = Math.max(1, Math.floor(qty) || 1)
+    setCart(prev => {
+      const idx = prev.findIndex(i => i.productId === p.id && i.unitId === unit.id)
+      const existingQty = idx >= 0 ? prev[idx].qty : 0
+      if (p.availableBase != null && (existingQty + addQty) * unit.factor > p.availableBase) {
+        toast.error(`موجودی قابل فروش «${p.name}» کافی نیست (قابل فروش: ${formatFaNumber(p.availableBase)})`)
+        return prev
+      }
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], qty: next[idx].qty + addQty }
+        return next
+      }
+      return [...prev, {
+        productId: p.id, productName: p.name, sku: p.sku, imageUrl: p.imageUrl,
+        unitId: unit.id, unitName: unit.name, factor: unit.factor,
+        qty: addQty, unitPriceRls: unit.defaultPriceRls, availableBase: p.availableBase,
+      }]
+    })
+    toast.success(`«${p.name}» به سبد اضافه شد`)
+  }
+
   return (
     <div>
       {/* هیرو اسلایدشو با بنرهای مدیر — در نبود بنر، بنر پیش‌فرض گرادیانی */}
@@ -126,6 +171,20 @@ export default function StorefrontView() {
                 className="bg-white/95 text-stone-800 border-0 pr-9 placeholder:text-stone-400"
               />
             </div>
+            {canOrder && (
+              <Button
+                size="sm" onClick={() => setCartOpen(true)}
+                className="bg-white text-emerald-700 hover:bg-emerald-50 shrink-0 relative"
+                aria-label="باز کردن سبد سفارش مشتری"
+              >
+                <ShoppingBasket className="h-4 w-4 ml-1" /> سبد سفارش مشتری
+                {cart.length > 0 && (
+                  <span className="absolute -top-1.5 -left-1.5 grid place-items-center h-5 min-w-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                    {formatFaNumber(cart.length)}
+                  </span>
+                )}
+              </Button>
+            )}
             <Button
               variant="outline" size="sm" onClick={reload}
               className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white shrink-0"
@@ -149,6 +208,16 @@ export default function StorefrontView() {
               className="bg-card pr-9 placeholder:text-stone-400"
             />
           </div>
+          {canOrder && (
+            <Button variant="outline" size="sm" onClick={() => setCartOpen(true)} className="shrink-0 relative">
+              <ShoppingBasket className="h-4 w-4 ml-1" /> سبد سفارش مشتری
+              {cart.length > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 grid place-items-center h-5 min-w-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                  {formatFaNumber(cart.length)}
+                </span>
+              )}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={reload} className="shrink-0">
             <RefreshCw className="h-4 w-4 ml-1" /> به‌روزرسانی
           </Button>
@@ -227,6 +296,8 @@ export default function StorefrontView() {
               inCompare={compareIds.includes(p.id)}
               onToggleCompare={() => toggleCompare(p.id)}
               onDetail={() => setDetailId(p.id)}
+              canAdd={canOrder}
+              onAdd={() => addToCart(p)}
             />
           ))}
         </div>
@@ -270,19 +341,47 @@ export default function StorefrontView() {
         </div>
       )}
 
-      <ProductDetailDialog p={detail} onClose={() => setDetailId(null)} />
+      <ProductDetailDialog p={detail} canOrder={canOrder} onAddUnit={u => detail && addToCart(detail, u)} onClose={() => setDetailId(null)} />
       <CompareDialog open={compareOpen} onOpenChange={setCompareOpen} products={compareProducts} onRemove={toggleCompare} />
+
+      {/* نوار شناور سبد — وقتی مقایسه فعال است بالاتر می‌ایستد تا با هم تداخل نکنند */}
+      {canOrder && cart.length > 0 && (
+        <div className={`fixed inset-x-0 z-40 flex justify-center px-4 pointer-events-none ${compareIds.length > 0 ? 'bottom-20' : 'bottom-4'}`}>
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-emerald-600 text-white shadow-2xl border border-emerald-700 py-2 pr-4 pl-2">
+            <ShoppingBasket className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-xs font-bold whitespace-nowrap">{formatFaNumber(cart.length)} قلم در سبد</span>
+            <span className="text-[11px] whitespace-nowrap opacity-90 hidden sm:block">
+              تخمین با قیمت عمومی: <Money rls={cart.reduce((s, i) => s + (i.unitPriceRls ?? 0) * i.qty, 0)} className="font-bold" />
+            </span>
+            <Button
+              size="sm" onClick={() => setCartOpen(true)}
+              className="rounded-full bg-white text-emerald-700 hover:bg-emerald-50 h-8 shrink-0"
+            >
+              مشاهده و ثبت سفارش
+            </Button>
+            <button onClick={() => setCart([])} aria-label="خالی کردن سبد" className="rounded-full hover:bg-white/20 p-1.5 shrink-0">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canOrder && user && (
+        <StoreOrderCart open={cartOpen} onOpenChange={setCartOpen} user={user} items={cart} onItemsChange={setCart} />
+      )}
     </div>
   )
 }
 
 // ─── کارت محصول ───
 
-function ProductCard({ p, inCompare, onToggleCompare, onDetail }: {
+function ProductCard({ p, inCompare, onToggleCompare, onDetail, canAdd, onAdd }: {
   p: ProductListItem
   inCompare: boolean
   onToggleCompare: () => void
   onDetail: () => void
+  canAdd: boolean
+  onAdd: () => void
 }) {
   const base = p.units.find(u => u.isBase) ?? null
   const carton = p.units.find(u => !u.isBase && u.defaultPriceRls != null) ?? p.units.find(u => !u.isBase) ?? null
@@ -346,6 +445,15 @@ function ProductCard({ p, inCompare, onToggleCompare, onDetail }: {
           <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={onDetail}>
             <Eye className="h-3.5 w-3.5 ml-1" /> جزئیات
           </Button>
+          {canAdd && (
+            <Button
+              size="sm" onClick={onAdd}
+              className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              title="افزودن به سبد سفارش مشتری"
+            >
+              <ShoppingBasket className="h-3.5 w-3.5 ml-1" /> سبد
+            </Button>
+          )}
           <Button
             size="sm"
             variant={inCompare ? 'default' : 'outline'}
@@ -363,7 +471,12 @@ function ProductCard({ p, inCompare, onToggleCompare, onDetail }: {
 
 // ─── مشاهده جزئیات محصول ───
 
-function ProductDetailDialog({ p, onClose }: { p: ProductListItem | null; onClose: () => void }) {
+function ProductDetailDialog({ p, canOrder, onAddUnit, onClose }: {
+  p: ProductListItem | null
+  canOrder: boolean
+  onAddUnit: (unitId: string) => void
+  onClose: () => void
+}) {
   const st = p ? stockInfo(p) : null
   return (
     <Dialog open={!!p} onOpenChange={v => !v && onClose()}>
@@ -406,6 +519,7 @@ function ProductDetailDialog({ p, onClose }: { p: ProductListItem | null; onClos
                     <TableHead>فاکتور پایه</TableHead>
                     <TableHead>بارکد</TableHead>
                     <TableHead>قیمت عمومی</TableHead>
+                    {canOrder && <TableHead />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -422,6 +536,17 @@ function ProductDetailDialog({ p, onClose }: { p: ProductListItem | null; onClos
                           ? <Money rls={u.defaultPriceRls} className="text-xs font-bold text-emerald-700" />
                           : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
+                      {canOrder && (
+                        <TableCell>
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-[11px]"
+                            onClick={() => onAddUnit(u.id)}
+                            title="افزودن این واحد به سبد سفارش مشتری"
+                          >
+                            <ShoppingBasket className="h-3 w-3 ml-1" /> افزودن
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

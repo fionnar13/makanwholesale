@@ -513,7 +513,10 @@ async function main() {
           code: c.code, shopName: c.shopName, businessType: c.businessType, groupKey: c.groupKey,
           ownerName: c.ownerName, phone: c.phone, address: c.address,
           creditLimitRls: c.creditLimitRls, creditDays: c.creditDays,
-          territoryId: territoryIds[c.territory], salesRepId: visitorUser?.id ?? null,
+          territoryId: territoryIds[c.territory],
+          // مسئول فروش = ویزیتور همان منطقه — فقط TZ-1 ویزیتور دارد (سمیرا)؛
+          // سایر مناطق بدون ویزیتورند تا scoping «مشتریان خود ویزیتور» قابل نمایش باشد
+          salesRepId: c.territory === 'TZ-1' ? (visitorUser?.id ?? null) : null,
           isDemo: true,
         },
       })

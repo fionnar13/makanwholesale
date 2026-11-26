@@ -38,7 +38,7 @@ async function getDefaultWarehouseId(tx: DbLike): Promise<string> {
 }
 
 export async function createOrder(
-  user: { id: string; permissions: string[] },
+  user: { id: string; permissions: string[]; roles?: string[] },
   input: CreateOrderInput,
   ip?: string,
 ) {
@@ -56,6 +56,12 @@ export async function createOrder(
   if (!customer || customer.status !== 'ACTIVE') {
     throw new ApiError(400, 'CUSTOMER_INACTIVE', 'مشتری یافت نشد یا غیرفعال است')
   }
+  // ویزیتور میدانی فقط برای مشتریان مرتبط به خودش (مسئول فروش یا ثبت‌کننده) سفارش ثبت می‌کند
+  const isFieldSeller = user.permissions.includes('orders.create') && !user.permissions.includes('orders.confirm')
+  if (isFieldSeller && !user.permissions.includes('customers.manage')
+    && customer.salesRepId !== user.id && customer.createdById !== user.id) {
+    throw new ApiError(403, 'CUSTOMER_NOT_ASSIGNED', 'این مشتری به شما اختصاص ندارد و ثبت سفارش برای آن مجاز نیست')
+  }
   if (input.branchId) {
     const branch = await db.customerBranch.findUnique({ where: { id: input.branchId } })
     if (!branch || branch.customerId !== customer.id) {
@@ -64,7 +70,8 @@ export async function createOrder(
   }
 
   // اعتبارسنجی اقلام + تبدیل به واحد پایه
-  const prepared = []
+  type PreparedItem = { productId: string; unitId: string; qty: number; qtyBase: number; unitName: string }
+  const prepared: PreparedItem[] = []
   for (const it of input.items) {
     if (!Number.isInteger(it.qty) || it.qty <= 0) {
       throw new ApiError(400, 'BAD_QTY', 'مقدار سفارش باید عدد صحیح مثبت باشد', it)
@@ -129,7 +136,8 @@ export async function createOrder(
         branchId: input.branchId ?? null,
         status: 'RESERVED',
         createdById: user.id,
-        visitorId: user.permissions.includes('orders.create') ? user.id : null,
+        // visitorId فقط برای ویزیتور واقعی ثبت می‌شود؛ سفارش مدیر/عملیات visitorId ندارد
+        visitorId: user.roles?.includes('VISITOR') ? user.id : null,
         payMethod: input.payMethod,
         totalRls,
         discountTotalRls: 0,

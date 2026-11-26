@@ -10,7 +10,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(req: NextRequest, ctx: Ctx) {
   return handler(async () => {
-    await requirePerm(req, 'orders.view')
+    const user = await requirePerm(req, 'orders.view')
     const { id } = await ctx.params
     const o = await db.order.findUnique({
       where: { id },
@@ -25,7 +25,13 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     })
     if (!o) throw new ApiError(404, 'ORDER_NOT_FOUND', 'سفارش یافت نشد')
 
-    const userIds = [...new Set([o.createdById, o.visitorId, o.driverId, ...o.events.map(e => e.userId).filter(Boolean) as string[]])]
+    // ویزیتور میدانی فقط جزئیات سفارش‌های خودش را می‌بیند
+    const isFieldSeller = user.permissions.includes('orders.create') && !user.permissions.includes('orders.confirm')
+    if (isFieldSeller && o.visitorId !== user.id && o.createdById !== user.id) {
+      throw new ApiError(403, 'FORBIDDEN', 'این سفارش متعلق به شما نیست')
+    }
+
+    const userIds = [...new Set([o.createdById, o.visitorId, o.driverId, ...o.events.map(e => e.userId)].filter((u): u is string => !!u))]
     const users = await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
     const userMap = new Map(users.map(u => [u.id, u.name]))
 

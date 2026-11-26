@@ -82,7 +82,8 @@ docker run -d --name makan-db -p 5432:5432 \
 
 ```bash
 # ۱) کد را روی سرور ببرید (git clone یا فایل tar)
-cd makan-store
+git clone https://github.com/fionnar13/makanwholesale.git
+cd makanwholesale
 
 # ۲) فایل .env کنار docker-compose.yml بسازید:
 cat > .env <<'EOF'
@@ -101,7 +102,7 @@ docker compose exec app cat db/.initial-admin-password.txt
 
 **نکته‌ها:**
 - پیش از هر استارت، `prisma migrate deploy` خودکار اجرا می‌شود — آپدیت کد = `git pull && docker compose up -d --build`؛ مهاجرت‌های جدید بدون توقف داده اعمال می‌شوند.
-- داده‌های PG در Volume با نام `makan-store_pgdata` می‌مانند؛ پوشه آپلود کاربران هم روی میزبان در `./public/uploads` است.
+- داده‌های PG در Volume با نام `makanwholesale_pgdata` می‌مانند؛ پوشه آپلود کاربران هم روی میزبان در `./public/uploads` است.
 - برای دسترسی psql از میزبان: `docker compose exec db psql -U makan -d makan` (پورت ۵۴۳۳ فقط روی `127.0.0.1` میزبان باز است).
 
 ---
@@ -175,7 +176,7 @@ cat backup-2026-01-01.sql | docker compose exec -T db psql -U makan -d makan
 
 **زمان‌بندی روزانه با cron روی VPS:**
 ```
-0 3 * * * cd /opt/makan-store && docker compose exec db pg_dump -U makan -d makan | gzip > /var/backups/makan-$(date +\%F).sql.gz
+0 3 * * * cd /opt/makanwholesale && docker compose exec db pg_dump -U makan -d makan | gzip > /var/backups/makan-$(date +\%F).sql.gz
 ```
 
 ---

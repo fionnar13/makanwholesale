@@ -305,7 +305,7 @@ export default function App() {
       case 'orders': return <OrdersView user={user} />
       case 'customers': return <CustomersView user={user} />
       case 'catalog': return <CatalogView user={user} go={go} />
-      case 'storefront': return <StorefrontView />
+      case 'storefront': return <StorefrontView user={user} />
       case 'inventory': return <InventoryView user={user} />
       case 'suppliers': return <SuppliersView user={user} />
       case 'finance': return <FinanceView user={user} />
