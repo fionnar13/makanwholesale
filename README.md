@@ -112,5 +112,7 @@ bun run dev        # http://localhost:3000
 - محتوای `public/uploads/` (لوگو، فاوآیکون، پروفایل‌ها) در رانتایم ساخته می‌شود و جزو ریپو نیست.
 - کوکی نشست برای کارکرد صحیح داخل iframe به‌صورت خودکار با `SameSite=None; Secure; Partitioned` (در HTTPS) تنظیم می‌شود.
 - راهنمای کامل مهاجرت SQLite → PostgreSQL و برنامه بازگشت (Rollback): [docs/postgres-migration.md](docs/postgres-migration.md)
+- راهنمای یکپارچه‌سازی‌های خارجی (بکاپ Google Drive، Sheets، تلگرام، AI) + راه‌اندازی اعتبارنامه‌های Google و چک‌لیست تأیید نهایی: [docs/integrations.md](docs/integrations.md)
+- راهنمای cron بیرونی برای بکاپ قابل‌اتکا روی هاست‌های خواب‌شونده: [scripts/setup-cron.md](scripts/setup-cron.md)
 
 </div>
