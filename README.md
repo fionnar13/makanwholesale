@@ -2,6 +2,8 @@
 
 # Makan Store — سامانه بنکداری و فروشگاه محصولات
 
+[![CI](https://github.com/fionnar13/makanwholesale/actions/workflows/ci.yml/badge.svg)](https://github.com/fionnar13/makanwholesale/actions/workflows/ci.yml)
+
 پلتفرم بنکداری و فروشگاهی برای مدیریت محصولات، مشتریان، ویزیتورها و سفارش‌ها؛ همراه با فروشگاه آنلاین محصولات، پنل مدیریت داده‌ها و تنظیمات کامل ظاهر سایت.
 
 ## امکانات

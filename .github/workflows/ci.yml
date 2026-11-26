@@ -1,0 +1,65 @@
+# CI پروژه Makan Store — اجرا روی هر push و pull request به main
+# مراحل: نصب → typecheck → lint → آماده‌سازی PostgreSQL موقت → test → build
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    # DATABASE_URL برای همه مراحل — تست‌های وابسته به دیتابیس و build به آن نیاز دارند
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/makan_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/makan_test
+
+    # PostgreSQL موقت برای تست‌های یکپارچه — پس از پایان job از بین می‌رود
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: makan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Next.js 16 به Node ≥ 20.9 نیاز دارد — از LTS فعلی (22) استفاده می‌کنیم
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # ساخت اسکیمای دیتابیس موقت برای تست‌های وابسته به PostgreSQL
+      - name: Prepare test database
+        run: npx prisma db push --skip-generate
+
+      - name: Test
+        run: npm test
+
+      # build بدون ignoreBuildErrors — خطای تایپ جدید CI را قرمز می‌کند
+      - name: Build
+        run: npm run build
