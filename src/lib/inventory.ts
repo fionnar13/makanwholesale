@@ -147,7 +147,7 @@ export async function receiveStock(
     lotNo: string; producedAt?: Date | null; expiresAt?: Date | null;
     supplierId?: string | null;
   },
-  ref: { refType: string; refId: string; userId?: string | null; note?: string },
+  ref: { refType: string; refId: string | null; userId?: string | null; note?: string },
 ) {
   const lot = await tx.inventoryLot.create({
     data: {

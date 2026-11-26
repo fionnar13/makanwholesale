@@ -1,4 +1,5 @@
 // تایپ‌های مشترک سمت کلاینت
+// توجه: permissions اجباری است — همه Viewها فقط با کاربر نشست کامل (پاسخ /api/auth/me) رندر می‌شوند
 export type SessionUserLike = {
   id: string
   name: string
@@ -7,7 +8,7 @@ export type SessionUserLike = {
   avatarUrl?: string | null
   roles?: string[]
   roleLabels?: string[]
-  permissions?: string[]
+  permissions: string[]
 }
 
 export type ViewKeyLike =

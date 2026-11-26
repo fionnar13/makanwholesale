@@ -46,8 +46,13 @@ export async function GET(req: NextRequest) {
       where: { roles: { some: { role: { name: 'VISITOR' } } } },
       select: { id: true, name: true },
     })
+    const now = new Date()
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const result = []
+    type TargetRow = {
+      userId: string; name: string; target: { id: string; createdAt: Date; userId: string; amountRls: number; periodYm: string } | null
+      achievedRls: number; ordersCount: number; achievementPct: number | null
+    }
+    const result: TargetRow[] = []
     for (const u of users) {
       const t = targets.find(x => x.userId === u.id) ?? null
       const perf = await db.order.aggregate({

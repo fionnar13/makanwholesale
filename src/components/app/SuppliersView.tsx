@@ -2,6 +2,7 @@
 // تأمین‌کنندگان — تولیدکننده/واردکننده/بازرگانی + مانده حساب
 import { useState } from 'react'
 import { apiFetch, useApiData, DataTable, Money, PageHeader, Field, formatFaNumber } from './kit'
+import type { SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'

@@ -306,7 +306,7 @@ export async function transitionOrder(
           data: {
             receiptNo, customerId: order.customerId, amountRls: order.totalRls,
             method: order.payMethod === 'CASH' ? 'CASH' : 'TRANSFER',
-            refType: undefined, userId: user.id,
+            userId: user.id,
             note: `دریافت بابت سفارش ${order.orderNo}`,
           },
         })

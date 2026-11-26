@@ -5,7 +5,6 @@
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { apiFetch, LogoImg, hexToRgba, DEFAULT_GRADIENT_COLORS, defaultMobileConfig, type SiteIdentity, type LoginConfig, type LoginSideConfig, type LoginFormConfig } from './kit'
-import type { SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -78,7 +77,7 @@ function SideMedia({ kind, url }: { kind: 'image' | 'video'; url: string }) {
 }
 
 export default function Login({ onSuccess, authError, onRetry, site }: {
-  onSuccess: (u: SessionUserLike) => void
+  onSuccess: (u: { id: string; name: string; phone: string | null }) => void
   authError?: string | null
   onRetry?: () => void
   site?: SiteIdentity | null
@@ -137,7 +136,8 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
     e.preventDefault()
     setBusy(true)
     try {
-      const me = await apiFetch<SessionUserLike>('/api/auth/login', {
+      // پاسخ /api/auth/login فقط شناسه‌های پایه را برمی‌گرداند؛ نشست کامل پس از آن از /api/auth/me خوانده می‌شود
+      const me = await apiFetch<{ id: string; name: string; phone: string | null }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ phone, password }),
       })

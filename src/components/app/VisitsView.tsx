@@ -195,7 +195,7 @@ function CreateVisitDialog({ open, onOpenChange, onDone }: { open: boolean; onOp
     setForm(f => ({ ...f, customerId: id, branchId: '' }))
     if (!id) { setBranches([]); return }
     try {
-      const d = await apiFetch<{ branches: Array<{ id: string; name: string }> }>(`/api/customers/${id}`)
+      const d = await apiFetch<{ branches: Array<{ id: string; name: string; isActive: boolean }> }>(`/api/customers/${id}`)
       setBranches(d.branches.filter(b => b.isActive))
     } catch { setBranches([]) }
   }

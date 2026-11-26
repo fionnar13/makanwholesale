@@ -11,6 +11,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:migrate-data": "tsx scripts/migrate-sqlite-to-postgres.ts",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:integrations",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

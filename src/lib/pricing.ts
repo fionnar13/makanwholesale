@@ -107,11 +107,13 @@ export async function resolvePrice(input: ResolveInput): Promise<ResolvedPrice> 
 }
 
 // قیمت چند قلم سفارش با Snapshot کامل
+export type PricedItem = { productId: string; unitId: string; qtyBase: number } & ResolvedPrice
+
 export async function resolveOrderPrices(
   items: Array<{ productId: string; unitId: string; qtyBase: number }>,
   customerId: string,
-) {
-  const results = []
+): Promise<PricedItem[]> {
+  const results: PricedItem[] = []
   for (const it of items) {
     const price = await resolvePrice({ productId: it.productId, unitId: it.unitId, qtyBase: it.qtyBase, customerId })
     results.push({ ...it, ...price })
