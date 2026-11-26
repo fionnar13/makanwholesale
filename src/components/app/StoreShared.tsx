@@ -49,10 +49,20 @@ export function stockInfo(p: ProductListItem) {
   return { label: 'موجود', cls: 'text-emerald-600', dot: 'bg-emerald-500' }
 }
 
-export function ProductTile({ p }: { p: ProductListItem }) {
+// کاشی تصویر محصول — متناسب با موقعیت نمایش:
+//   fit='cover'   → پرکردن کادر با برش کنترل‌شده (کارت محصول، بندانگشتی لیست/مقایسه) — تصویر هرگز
+//                   از کانتینر بیرون نمی‌زند و کشیده نمی‌شود؛ کانتینر نسبت ابعاد ثابت دارد (بدون پرش Layout)
+//   fit='contain' → نمایش کامل محصول بدون برش روی پس‌زمینه روشن (گالری جزئیات محصول)
+export function ProductTile({ p, fit = 'cover' }: { p: ProductListItem; fit?: 'cover' | 'contain' }) {
   if (p.imageUrl) {
     return (
-      <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
+      <img
+        src={p.imageUrl}
+        alt={p.name}
+        className={`h-full w-full ${fit === 'contain' ? 'object-contain p-2' : 'object-cover'}`}
+        loading="lazy"
+        decoding="async"
+      />
     )
   }
   const pal = paletteFor(p.category)

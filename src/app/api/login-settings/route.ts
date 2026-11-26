@@ -7,6 +7,7 @@ import { handler, ok, parseBody } from '@/lib/api'
 import { requirePerm } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { DEFAULT_SITE_NAME, DEFAULT_SITE_SLOGAN } from '@/app/api/site-settings/route'
+import { DEFAULT_GRADIENT_COLORS, type LoginMobileConfig } from '@/lib/login-config'
 import type { LoginConfig, LoginFormConfig, LoginSideConfig } from '@/components/app/kit'
 
 // کلیدهای تنظیمات صفحه ورود در جدول Setting — هر فیلد یک کلید
@@ -16,6 +17,8 @@ const KEYS = [
   'login.form.bgKind', 'login.form.bgUrl', 'login.form.color', 'login.form.transparency',
   'login.form.blur', 'login.form.title', 'login.form.subtitle', 'login.form.footer',
   'login.form.textTone', 'login.form.showDemo',
+  'login.mobile.gradientEnabled', 'login.mobile.gradientColors', 'login.mobile.gradientSpeed',
+  'login.mobile.gradientAngle', 'login.mobile.gradientIntensity',
 ] as const
 
 // بندهای پیش‌فرض ستون معرفی — تا وقتی مدیر چیزی ثبت نکرده باشد
@@ -88,7 +91,20 @@ async function readLoginConfig(): Promise<LoginConfig> {
     showDemo: toBool(map['login.form.showDemo'], true),
   }
 
-  return { side, form }
+  // گرادیانت متحرک موبایل — رنگ‌های نامعتبر حذف و در نبود حداقل دو رنگ، پیش‌فرض اعمال می‌شود
+  const colors = (map['login.mobile.gradientColors'] ?? '')
+    .split(',')
+    .map(c => c.trim().toLowerCase())
+    .filter(c => /^#[0-9a-fA-F]{6}$/.test(c))
+  const mobile: LoginMobileConfig = {
+    gradientEnabled: toBool(map['login.mobile.gradientEnabled'], true),
+    gradientColors: colors.length >= 2 ? colors : DEFAULT_GRADIENT_COLORS,
+    gradientSpeed: toInt(map['login.mobile.gradientSpeed'], 14, 4, 60),
+    gradientAngle: toInt(map['login.mobile.gradientAngle'], 135, 0, 360),
+    gradientIntensity: toInt(map['login.mobile.gradientIntensity'], 60, 20, 100),
+  }
+
+  return { side, form, mobile }
 }
 
 export async function GET() {
@@ -126,10 +142,22 @@ const formSchema = z.object({
   showDemo: z.boolean().optional(),
 })
 
+// گرادیانت متحرک موبایل — ۲ تا ۵ رنگ HEX، سرعت/جهت/شدت با محدوده مجاز
+const mobileSchema = z.object({
+  gradientEnabled: z.boolean().optional(),
+  gradientColors: z.array(
+    z.string().regex(/^#[0-9a-fA-F]{6}$/, 'هر رنگ باید HEX شش‌رقمی باشد (مثل #10b981)'),
+  ).min(2, 'حداقل دو رنگ لازم است').max(5, 'حداکثر پنج رنگ').optional(),
+  gradientSpeed: z.number().int().min(4, 'سرعت باید بین ۴ تا ۶۰ ثانیه باشد').max(60, 'سرعت باید بین ۴ تا ۶۰ ثانیه باشد').optional(),
+  gradientAngle: z.number().int().min(0, 'جهت باید بین ۰ تا ۳۶۰ درجه باشد').max(360, 'جهت باید بین ۰ تا ۳۶۰ درجه باشد').optional(),
+  gradientIntensity: z.number().int().min(20, 'شدت باید بین ۲۰ تا ۱۰۰ درصد باشد').max(100, 'شدت باید بین ۲۰ تا ۱۰۰ درصد باشد').optional(),
+})
+
 const putSchema = z.object({
   side: sideSchema.optional(),
   form: formSchema.optional(),
-}).refine(v => v.side !== undefined || v.form !== undefined, 'داده‌ای برای ذخیره ارسال نشده است')
+  mobile: mobileSchema.optional(),
+}).refine(v => v.side !== undefined || v.form !== undefined || v.mobile !== undefined, 'داده‌ای برای ذخیره ارسال نشده است')
 
 export async function PUT(req: NextRequest) {
   return handler(async () => {
@@ -161,6 +189,14 @@ export async function PUT(req: NextRequest) {
       if (f.footer !== undefined) updates.push({ key: 'login.form.footer', value: f.footer })
       if (f.textTone !== undefined) updates.push({ key: 'login.form.textTone', value: f.textTone })
       if (f.showDemo !== undefined) updates.push({ key: 'login.form.showDemo', value: f.showDemo ? '1' : '0' })
+    }
+    const m = body.mobile
+    if (m) {
+      if (m.gradientEnabled !== undefined) updates.push({ key: 'login.mobile.gradientEnabled', value: m.gradientEnabled ? '1' : '0' })
+      if (m.gradientColors !== undefined) updates.push({ key: 'login.mobile.gradientColors', value: m.gradientColors.map(c => c.toLowerCase()).join(',') })
+      if (m.gradientSpeed !== undefined) updates.push({ key: 'login.mobile.gradientSpeed', value: String(m.gradientSpeed) })
+      if (m.gradientAngle !== undefined) updates.push({ key: 'login.mobile.gradientAngle', value: String(m.gradientAngle) })
+      if (m.gradientIntensity !== undefined) updates.push({ key: 'login.mobile.gradientIntensity', value: String(m.gradientIntensity) })
     }
 
     for (const u of updates) {

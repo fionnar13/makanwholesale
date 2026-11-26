@@ -128,6 +128,46 @@ body {
   }
 }
 
+/* ─── پس‌زمینه گرادیانت متحرک صفحه ورود — فقط موبایل ───
+   همهٔ پارامترها با متغیرهای CSS قابل سفارشی‌سازی‌اند و از پنل مدیریت (تنظیمات صفحه ورود)
+   مقداردهی می‌شوند:
+     --lg-c1 … --lg-c4  رنگ‌های گرادیانت (HEX)
+     --lg-speed         سرعت هر سیکل انیمیشن (ثانیه)
+     --lg-angle         جهت گرادیانت (درجه)
+     --lg-opacity       شدت/شفافیت لایه (۰ تا ۱)
+   فقط background-position انیمیت می‌شود — بدون تغییر DOM و بدون مانع شدن فرم ورود. */
+.bwh-login-gradient {
+  --lg-c1: #34d399;
+  --lg-c2: #0d9488;
+  --lg-c3: #10b981;
+  --lg-c4: #065f46;
+  --lg-speed: 14s;
+  --lg-angle: 135deg;
+  --lg-opacity: 0.6;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--lg-angle), var(--lg-c1), var(--lg-c2), var(--lg-c3), var(--lg-c4));
+  background-size: 300% 300%;
+  animation: bwh-grad-shift var(--lg-speed) ease-in-out infinite;
+  opacity: var(--lg-opacity);
+  pointer-events: none; /* هرگز جلوی تعامل فرم را نمی‌گیرد */
+  will-change: background-position;
+}
+
+@keyframes bwh-grad-shift {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+/* کاهش حرکت — انیمیشن خاموش و گرادیانت ثابت می‌ماند (خوانایی و دسترسی‌پذیری حفظ می‌شود) */
+@media (prefers-reduced-motion: reduce) {
+  .bwh-login-gradient {
+    animation: none;
+    will-change: auto;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

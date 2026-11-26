@@ -4,7 +4,7 @@
 //  • ستون چپ (فرم): پس‌زمینه تصویر یا ویدیو + رنگ/شفافیت/محو بودن کارت + نوشته‌های بالا و پایین فرم
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { apiFetch, LogoImg, hexToRgba, type SiteIdentity, type LoginConfig, type LoginSideConfig, type LoginFormConfig } from './kit'
+import { apiFetch, LogoImg, hexToRgba, DEFAULT_GRADIENT_COLORS, defaultMobileConfig, type SiteIdentity, type LoginConfig, type LoginSideConfig, type LoginFormConfig } from './kit'
 import type { SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -118,6 +118,20 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
 
   const side = cfg?.side ?? fallbackSide(siteName, siteSlogan)
   const form = cfg?.form ?? fallbackForm(siteName)
+  const mobile = cfg?.mobile ?? defaultMobileConfig()
+
+  // گرادیانت متحرک موبایل — فقط وقتی روشن است و ستون فرم پس‌زمینه تصویری/ویدیویی ندارد
+  const showGradient = mobile.gradientEnabled && mobile.gradientColors.length >= 2 && form.bgKind === 'none'
+  // متغیرهای CSS لایه گرادیانت — رنگ‌ها، سرعت، جهت و شدت از پنل مدیریت
+  const gradientStyle: React.CSSProperties = {
+    '--lg-c1': mobile.gradientColors[0] ?? DEFAULT_GRADIENT_COLORS[0],
+    '--lg-c2': mobile.gradientColors[1] ?? DEFAULT_GRADIENT_COLORS[1],
+    '--lg-c3': mobile.gradientColors[2] ?? mobile.gradientColors[0] ?? DEFAULT_GRADIENT_COLORS[2],
+    '--lg-c4': mobile.gradientColors[3] ?? mobile.gradientColors[1] ?? DEFAULT_GRADIENT_COLORS[3],
+    '--lg-speed': `${mobile.gradientSpeed}s`,
+    '--lg-angle': `${mobile.gradientAngle}deg`,
+    '--lg-opacity': (mobile.gradientIntensity / 100).toFixed(2),
+  } as React.CSSProperties
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -216,6 +230,11 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
 
       {/* ── ستون فرم ورود (سمت چپ) — کارت فرم با رنگ/شفافیت/محو بودن قابل تنظیم ── */}
       <section className="relative flex-1 overflow-hidden bg-stone-100">
+        {/* گرادیانت متحرک — فقط موبایل/تبلت (lg:hidden)؛ دسکتاپ مانند قبل قالبِ پیش‌فرض را می‌بیند */}
+        {/* prefers-reduced-motion: انیمیشن در CSS خاموش می‌شود و گرادیانت ثابت می‌ماند */}
+        {showGradient && (
+          <div aria-hidden className="bwh-login-gradient lg:hidden" style={gradientStyle} />
+        )}
         {(form.bgKind === 'image' || form.bgKind === 'video') && form.bgUrl && (
           <SideMedia kind={form.bgKind} url={form.bgUrl} />
         )}

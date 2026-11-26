@@ -64,7 +64,12 @@ export type LoginFormConfig = {
   showDemo: boolean // نمایش کادر حساب‌های نمایشی
 }
 
-export type LoginConfig = { side: LoginSideConfig; form: LoginFormConfig }
+export type LoginConfig = { side: LoginSideConfig; form: LoginFormConfig; mobile: LoginMobileConfig }
+
+// بخش موبایل (گرادیانت متحرک) — نوع و ثابت‌ها در src/lib/login-config.ts مشترک بین سرور و کلاینت‌اند
+import type { LoginMobileConfig } from '@/lib/login-config'
+export { DEFAULT_GRADIENT_COLORS, defaultMobileConfig } from '@/lib/login-config'
+export type { LoginMobileConfig }
 
 // تبدیل HEX به rgba با شفافیت درصدی — برای کارت فرم
 export function hexToRgba(hex: string, transparencyPercent: number): string {
@@ -160,6 +165,51 @@ export async function apiUpload<T>(url: string, form: FormData, method: 'POST' |
     throw new ApiClientError(json?.error?.code ?? 'UNKNOWN', json?.error?.message ?? 'خطای ناشناخته', json?.error?.details)
   }
   return json.data as T
+}
+
+// ─── بهینه‌سازی سمت کلاینت تصویر قبل از آپلود ───
+// تصاویر PNG/JPEG/WEBP بزرگ با Canvas به WebP مقیاس‌شده تبدیل می‌شوند تا حجم آپلود کم شود؛
+// سرور همیشه دوباره به WebP تبدیل می‌کند، پس این مرحله فقط «شتاب‌دهنده» است و در نبود پشتیبانی
+// مرورگر (مثلاً رمزگذاری WebP در Safari قدیمی) فایل اصلی بدون تغییر ارسال می‌شود.
+// SVG و GIF و ICO و ویدیو دست‌نخورده می‌مانند (وکتور/انیمیشن/فرمت خاص).
+const CLIENT_OPTIMIZE_MIN_BYTES = 256 * 1024 // زیر ۲۵۶ کیلوبایت بهینه‌سازی لازم نیست
+
+export async function optimizeImageBeforeUpload(file: File, opts?: {
+  maxDimension?: number // سقف بزرگ‌ترین ضلع — پیش‌فرض ۲۰۴۸
+  quality?: number // کیفیت WebP از ۰٫۱ تا ۱ — پیش‌فرض ۰٫۸۵
+}): Promise<File> {
+  const maxDimension = opts?.maxDimension ?? 2048
+  const quality = opts?.quality ?? 0.85
+  try {
+    const isRaster = ['image/png', 'image/jpeg', 'image/webp'].includes(file.type)
+    if (!isRaster || file.size < CLIENT_OPTIMIZE_MIN_BYTES) return file
+    if (typeof createImageBitmap !== 'function') return file
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+      if (scale >= 1 && file.type === 'image/webp') return file // WebP مقیاس‌شده تکراری است
+      const w = Math.max(1, Math.round(bitmap.width * scale))
+      const h = Math.max(1, Math.round(bitmap.height * scale))
+      const canvas = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(w, h)
+        : Object.assign(document.createElement('canvas'), { width: w, height: h })
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return file
+      ctx.drawImage(bitmap, 0, 0, w, h)
+      const blob: Blob | null = await new Promise(resolve => {
+        if ('convertToBlob' in canvas) resolve((canvas as OffscreenCanvas).convertToBlob({ type: 'image/webp', quality }))
+        else (canvas as HTMLCanvasElement).toBlob(b => resolve(b), 'image/webp', quality)
+      })
+      // اگر مرورگر WebP رمزگذاری نکرد (blob.type متفاوت) یا کوچک‌تر نشد — فایل اصلی ارسال می‌شود
+      if (!blob || blob.type !== 'image/webp' || blob.size >= file.size) return file
+      const base = file.name.replace(/\.[^.]+$/, '')
+      return new File([blob], `${base}.webp`, { type: 'image/webp', lastModified: file.lastModified })
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return file // هر خطایی در بهینه‌سازی نباید مانع آپلود شود
+  }
 }
 
 // ─── اجزای نمایش ───

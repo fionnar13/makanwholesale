@@ -2,6 +2,8 @@
 // کاتالوگ محصولات — لیست، ایجاد با واحدها، مدیریت قواعد قیمت
 import { useEffect, useState } from 'react'
 import { apiFetch, useApiData, DataTable, Money, JDate, PageHeader, Field, formatFaNumber } from './kit'
+import { ProductTile } from './StoreShared'
+import ImageLightbox, { type LightboxImage } from './ImageLightbox'
 import type { ProductListItem, SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +37,8 @@ export default function CatalogView({ user, go }: { user: SessionUserLike; go?: 
   const [q, setQ] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [pricesId, setPricesId] = useState<string | null>(null)
+  // لایت‌باکس بندانگشتی لیست — کلیک روی تصویر سطر، همان تصویر را تمام‌صفحه نشان می‌دهد
+  const [lightbox, setLightbox] = useState<LightboxImage[] | null>(null)
   const { data, loading, error, reload } = useApiData<ProductListItem[]>(`/api/products${q ? `?q=${encodeURIComponent(q)}` : ''}`)
   const { data: meta } = useApiData<Meta>('/api/products?meta=1')
 
@@ -67,6 +71,20 @@ export default function CatalogView({ user, go }: { user: SessionUserLike; go?: 
       ) : (
         <DataTable
           columns={[
+            {
+              key: 'img', header: 'تصویر', cell: (p: ProductListItem) => p.imageUrl ? (
+                // بندانگشتی ۱۲×۱۲ با کانتینر ثابت — تصویر با برش کنترل‌شده داخل کادر می‌ماند
+                <button
+                  type="button"
+                  onClick={() => setLightbox([{ src: p.imageUrl as string, alt: p.name }])}
+                  aria-label={`مشاهده تصویر بزرگ ${p.name}`}
+                  title="مشاهده تصویر بزرگ"
+                  className="block h-12 w-12 rounded-lg overflow-hidden border bg-stone-50 cursor-zoom-in"
+                >
+                  <ProductTile p={p} />
+                </button>
+              ) : <span className="text-xs text-muted-foreground">—</span>,
+            },
             {
               key: 'name', header: 'کالا', cell: (p: ProductListItem) => (
                 <div>
@@ -105,6 +123,7 @@ export default function CatalogView({ user, go }: { user: SessionUserLike; go?: 
 
       <CreateProductDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={reload} meta={meta} />
       <PriceRulesDialog id={pricesId} onClose={() => setPricesId(null)} onChanged={reload} />
+      <ImageLightbox images={lightbox ?? []} index={lightbox ? 0 : null} onClose={() => setLightbox(null)} />
     </div>
   )
 }

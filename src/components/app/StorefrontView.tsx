@@ -9,6 +9,7 @@ import { ErrorState, Money, formatFaNumber, useApiData, type SiteIdentity } from
 import { COMPARE_MAX, ProductTile, stockInfo, type StoreMeta } from './StoreShared'
 import CompareDialog from './StoreCompare'
 import StoreHero from './StoreHero'
+import ImageLightbox, { type LightboxImage } from './ImageLightbox'
 import StoreOrderCart, { type CartItem } from './StoreOrderCart'
 import type { ProductListItem, SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,8 @@ export default function StorefrontView({ user }: { user?: SessionUserLike }) {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
+  // لایت‌باکس تصویر — لیست تصاویرِ محصولات فیلترشده؛ ناوبری بین تصویرها با فلش/کشیدن لمسی
+  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null)
 
   // ─── سبد خرید ویزیتور — در sessionStorage زنده می‌ماند (بازخوانی صفحه سبد را نمی‌بندد) ───
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -101,6 +104,20 @@ export default function StorefrontView({ user }: { user?: SessionUserLike }) {
   const changeCategory = (id: string | null) => {
     setCategoryId(id)
     setBrandId(null) // برند انتخابی ممکن است به دسته جدید تعلق نداشته باشد
+  }
+
+  // ─── لایت‌باکس — گالری از تصویرهای محصولاتِ فیلترشده؛ کلیک روی هر تصویر از همان‌جا باز می‌شود ───
+  const lbImages = useMemo(
+    () => filtered.filter(p => p.imageUrl).map(p => ({ id: p.id, img: { src: p.imageUrl as string, alt: p.name } })),
+    [filtered],
+  )
+  const openLightbox = (p: ProductListItem) => {
+    if (!p.imageUrl) return
+    const idx = lbImages.findIndex(x => x.id === p.id)
+    setLightbox({
+      images: lbImages.map(x => x.img),
+      index: idx >= 0 ? idx : 0, // اگر در فهرست فعلی نبود، همان تصویر تنها باز می‌شود
+    })
   }
 
   const toggleCompare = (id: string) => {
@@ -296,6 +313,7 @@ export default function StorefrontView({ user }: { user?: SessionUserLike }) {
               inCompare={compareIds.includes(p.id)}
               onToggleCompare={() => toggleCompare(p.id)}
               onDetail={() => setDetailId(p.id)}
+              onOpenImage={() => openLightbox(p)}
               canAdd={canOrder}
               onAdd={() => addToCart(p)}
             />
@@ -341,8 +359,10 @@ export default function StorefrontView({ user }: { user?: SessionUserLike }) {
         </div>
       )}
 
-      <ProductDetailDialog p={detail} canOrder={canOrder} onAddUnit={u => detail && addToCart(detail, u)} onClose={() => setDetailId(null)} />
+      <ProductDetailDialog p={detail} canOrder={canOrder} onAddUnit={u => detail && addToCart(detail, u)} onClose={() => setDetailId(null)} onOpenImage={openLightbox} />
       <CompareDialog open={compareOpen} onOpenChange={setCompareOpen} products={compareProducts} onRemove={toggleCompare} />
+      {/* لایت‌باکس تصویر تمام‌صفحه — کلید Escape، کلیک پس‌زمینه و ناوبری قبلی/بعدی */}
+      <ImageLightbox images={lightbox?.images ?? []} index={lightbox?.index ?? null} onClose={() => setLightbox(null)} />
 
       {/* نوار شناور سبد — وقتی مقایسه فعال است بالاتر می‌ایستد تا با هم تداخل نکنند */}
       {canOrder && cart.length > 0 && (
@@ -375,11 +395,12 @@ export default function StorefrontView({ user }: { user?: SessionUserLike }) {
 
 // ─── کارت محصول ───
 
-function ProductCard({ p, inCompare, onToggleCompare, onDetail, canAdd, onAdd }: {
+function ProductCard({ p, inCompare, onToggleCompare, onDetail, onOpenImage, canAdd, onAdd }: {
   p: ProductListItem
   inCompare: boolean
   onToggleCompare: () => void
   onDetail: () => void
+  onOpenImage: () => void
   canAdd: boolean
   onAdd: () => void
 }) {
@@ -391,19 +412,32 @@ function ProductCard({ p, inCompare, onToggleCompare, onDetail, canAdd, onAdd }:
 
   return (
     <div className="group rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all flex flex-col">
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <ProductTile p={p} />
-        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+      {/* کاشی تصویر — نسبت ابعاد ثابت (بدون پرش Layout) + برش کنترل‌شده؛ کلیک = لایت‌باکس */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
+        {p.imageUrl ? (
+          <button
+            type="button"
+            onClick={onOpenImage}
+            title="مشاهده تصویر بزرگ"
+            aria-label={`مشاهده تصویر بزرگ ${p.name}`}
+            className="block h-full w-full cursor-zoom-in"
+          >
+            <ProductTile p={p} />
+          </button>
+        ) : (
+          <ProductTile p={p} />
+        )}
+        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end pointer-events-none">
           {p.isDemo && <Badge variant="outline" className="text-[9px] bg-white/90 text-amber-700 border-amber-300 backdrop-blur">DEMO_SEED</Badge>}
           {!p.isActive && <Badge variant="outline" className="text-[9px] bg-white/90 text-rose-600 border-rose-300 backdrop-blur">غیرفعال</Badge>}
         </div>
         {p.category && (
-          <span className="absolute top-2 left-2 rounded-full bg-white/90 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-stone-600 shadow-sm">
+          <span className="absolute top-2 left-2 rounded-full bg-white/90 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-stone-600 shadow-sm pointer-events-none">
             {p.category}
           </span>
         )}
         {p.brand && (
-          <span className="absolute bottom-2 right-2 rounded-full bg-stone-900/75 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
+          <span className="absolute bottom-2 right-2 rounded-full bg-stone-900/75 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-white shadow-sm pointer-events-none">
             {p.brand}
           </span>
         )}
@@ -471,11 +505,12 @@ function ProductCard({ p, inCompare, onToggleCompare, onDetail, canAdd, onAdd }:
 
 // ─── مشاهده جزئیات محصول ───
 
-function ProductDetailDialog({ p, canOrder, onAddUnit, onClose }: {
+function ProductDetailDialog({ p, canOrder, onAddUnit, onClose, onOpenImage }: {
   p: ProductListItem | null
   canOrder: boolean
   onAddUnit: (unitId: string) => void
   onClose: () => void
+  onOpenImage?: (p: ProductListItem) => void
 }) {
   const st = p ? stockInfo(p) : null
   return (
@@ -494,9 +529,16 @@ function ProductDetailDialog({ p, canOrder, onAddUnit, onClose }: {
             </DialogHeader>
 
             {/* ارتفاع ثابت — aspect-ratio روی آیتم گریدِ Dialog در Chrome ردیف را به‌هم می‌ریزد */}
-            <div className="rounded-xl overflow-hidden h-52 sm:h-60 border bg-stone-50">
-              <ProductTile p={p} />
-            </div>
+            {/* fit=contain → دیدن کامل محصول بدون برش؛ کلیک روی تصویر = لایت‌باکس */}
+            <button
+              type="button"
+              onClick={() => onOpenImage?.(p)}
+              aria-label={`مشاهده تصویر بزرگ ${p.name}`}
+              title="مشاهده تصویر بزرگ"
+              className="block w-full rounded-xl overflow-hidden h-52 sm:h-60 border bg-stone-50 cursor-zoom-in"
+            >
+              <ProductTile p={p} fit="contain" />
+            </button>
 
             {p.description && <p className="text-xs text-stone-600 leading-6">{p.description}</p>}
 

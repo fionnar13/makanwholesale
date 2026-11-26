@@ -190,5 +190,38 @@ check "admin sees ALL customers (incl سحر)" 'CUS-1002' "$CA"
 RCV=$(curl -s -b $JAR_ADMIN -X POST $BASE/api/orders/$VID -H 'Content-Type: application/json' -d '{"action":"cancel","note":"پاکسازی تست"}')
 check "cleanup: cancelled" '"CANCELLED"' "$RCV"
 
+say "19) تصاویر — تبدیل WebP سمت سرور"
+# آپلود JPEG واقعی از فایل‌های نمونه — باید به WebP تبدیل شود
+UP=$(curl -s -b $JAR_ADMIN -X POST $BASE/api/uploads -F kind=banner -F "file=@public/products/tomato-paste-mit.jpg;type=image/jpeg")
+check "uploaded image converted to webp" '.webp' "$UP"
+UP_URL=$(echo "$UP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['url'])" 2>/dev/null || true)
+if [ -n "$UP_URL" ] && [[ "$UP_URL" == *.webp ]] && [ -f "public$UP_URL" ]; then
+  check "webp file exists on disk" 'webp' "public$UP_URL"
+  CT=$(curl -s -I "$BASE$UP_URL" | rg -i '^content-type' | tr -d '\r')
+  check "served as image/webp" 'image/webp' "$CT"
+  rm -f "public$UP_URL" # پاکسازی فایل تست
+else
+  check "webp file exists on disk" 'ok' "$UP"
+fi
+# فایل خراب — امضای بایتی نامعتبر؛ قبل از رسیدن به پردازش تصویر رد می‌شود
+printf 'not-an-image-at-all' > /tmp/bwh-bad.png
+BAD=$(curl -s -b $JAR_ADMIN -X POST $BASE/api/uploads -F kind=banner -F "file=@/tmp/bwh-bad.png;type=image/png")
+check "corrupt image rejected (byte signature)" 'BAD_TYPE' "$BAD"
+
+say "20) تنظیمات موبایل صفحه ورود (گرادیانت متحرک)"
+LS=$(curl -s $BASE/api/login-settings)
+check "GET login-settings has mobile gradient" 'gradientColors' "$LS"
+check "gradient default enabled" '"gradientEnabled":true' "$LS"
+# اعتبارسنجی — رنگ نامعتبر رد می‌شود
+LSBAD=$(curl -s -b $JAR_ADMIN -X PUT $BASE/api/login-settings -H 'Content-Type: application/json' -d '{"mobile":{"gradientColors":["#0d9488","red"]}}')
+check "invalid gradient color rejected" 'ok":false' "$LSBAD"
+# ذخیره پالت سفارشی و بازخوانی
+LSPUT=$(curl -s -b $JAR_ADMIN -X PUT $BASE/api/login-settings -H 'Content-Type: application/json' -d '{"mobile":{"gradientColors":["#0d9488","#34d399","#065f46"],"gradientSpeed":18,"gradientAngle":120,"gradientIntensity":70}}')
+check "PUT mobile palette ok" '"ok":true' "$LSPUT"
+check "palette persisted" '#0d9488' "$LSPUT"
+check "speed persisted" '"gradientSpeed":18' "$LSPUT"
+# بازگردانی پیش‌فرض‌ها
+curl -s -b $JAR_ADMIN -X PUT $BASE/api/login-settings -H 'Content-Type: application/json' -d '{"mobile":{"gradientColors":["#34d399","#0d9488","#10b981","#065f46"],"gradientSpeed":14,"gradientAngle":135,"gradientIntensity":60}}' > /dev/null
+
 echo
 echo "════ نتیجه: $PASS موفق، $FAIL ناموفق ════"

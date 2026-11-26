@@ -2,7 +2,7 @@
 // گفتگوی تصویر پروفایل — هر کاربر می‌تواند تصویر خودش را بارگذاری یا حذف کند
 import { useEffect, useRef, useState } from 'react'
 import { ImagePlus, Trash2 } from 'lucide-react'
-import { apiFetch, apiUpload, UserAvatar } from './kit'
+import { apiFetch, apiUpload, optimizeImageBeforeUpload, UserAvatar } from './kit'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
@@ -44,9 +44,10 @@ export default function ProfileAvatarDialog({ open, onOpenChange, user, onUpdate
     if (!file) return
     setBusy(true)
     try {
+      const optimized = await optimizeImageBeforeUpload(file, { maxDimension: 512 })
       const form = new FormData()
       form.append('kind', 'avatar')
-      form.append('file', file)
+      form.append('file', optimized)
       const res = await apiUpload<{ avatarUrl: string }>('/api/uploads', form)
       onUpdated(res.avatarUrl)
       toast.success('تصویر پروفایل به‌روزرسانی شد')

@@ -2,7 +2,7 @@
 // پنل مدیریت داده‌ها — مدیریت موجودیت‌های پایه دیتابیس
 // دسترسی: فقط مجوز users.manage (مدیر کل / آدمین)
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiUpload, useApiData, DataTable, JDate, PageHeader, Field, formatFaNumber, SiteIdentity, notifySiteChanged, hexToRgba, type LoginConfig, type LoginMediaKind, type LoginSideConfig, type LoginFormConfig } from './kit'
+import { apiFetch, apiUpload, optimizeImageBeforeUpload, useApiData, DataTable, JDate, PageHeader, Field, formatFaNumber, SiteIdentity, notifySiteChanged, hexToRgba, DEFAULT_GRADIENT_COLORS, type LoginConfig, type LoginMediaKind, type LoginSideConfig, type LoginFormConfig, type LoginMobileConfig } from './kit'
 import type { SessionUserLike, ViewKeyLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tags, BadgeCheck, Warehouse, Users, Images, Settings2 } from 'lucide-react'
-import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2, LayoutPanelTop, ChevronUp, ChevronDown, KeyRound, LogIn } from 'lucide-react'
+import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2, LayoutPanelTop, ChevronUp, ChevronDown, KeyRound, LogIn, Smartphone } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { toast } from 'sonner'
 
@@ -861,9 +861,10 @@ function SiteSettingsTab() {
   const uploadImage = async (kind: 'logo' | 'favicon', file: File) => {
     setUploading(kind)
     try {
+      const optimized = await optimizeImageBeforeUpload(file)
       const form = new FormData()
       form.append('kind', kind)
-      form.append('file', file)
+      form.append('file', optimized)
       const res = await apiUpload<{ url: string }>('/api/uploads', form)
       await apiFetch('/api/site-settings', {
         method: 'PUT',
@@ -1168,9 +1169,10 @@ function BannerDialog({ open, banner, isNew, onClose, onDone }: {
   const upload = async (file: File) => {
     setUploading(true)
     try {
+      const optimized = await optimizeImageBeforeUpload(file)
       const form = new FormData()
       form.append('kind', 'banner')
-      form.append('file', file)
+      form.append('file', optimized)
       const res = await apiUpload<{ url: string }>('/api/uploads', form)
       setImageUrl(res.url)
       setDirty(true)
@@ -1450,10 +1452,161 @@ function TextToneSelect({ value, onChange }: { value: LoginSideConfig['textTone'
   )
 }
 
+// متغیرهای CSS لایه گرادیانت — از تنظیمات موبایل به کلاس bwh-login-gradient
+export function gradientVars(m: LoginMobileConfig): React.CSSProperties {
+  return {
+    '--lg-c1': m.gradientColors[0] ?? DEFAULT_GRADIENT_COLORS[0],
+    '--lg-c2': m.gradientColors[1] ?? DEFAULT_GRADIENT_COLORS[1],
+    '--lg-c3': m.gradientColors[2] ?? m.gradientColors[0] ?? DEFAULT_GRADIENT_COLORS[2],
+    '--lg-c4': m.gradientColors[3] ?? m.gradientColors[1] ?? DEFAULT_GRADIENT_COLORS[3],
+    '--lg-speed': `${m.gradientSpeed}s`,
+    '--lg-angle': `${m.gradientAngle}deg`,
+    '--lg-opacity': (m.gradientIntensity / 100).toFixed(2),
+  } as React.CSSProperties
+}
+
+// ─── تنظیمات گرادیانت متحرک موبایل صفحه ورود ───
+const GRADIENT_SWATCH_SETS = [
+  ['#34d399', '#0d9488', '#10b981', '#065f46'], // زمردی قالب
+  ['#f59e0b', '#ef4444', '#ec4899', '#7c2d12'], // غروب
+  ['#60a5fa', '#6366f1', '#8b5cf6', '#1e1b4b'], // شب
+  ['#fbbf24', '#f97316', '#f43f5e', '#7f1d1d'], // آتش
+]
+
+function MobileGradientSettings({ mobile, onPatch, onUpdater }: {
+  mobile: LoginMobileConfig
+  onPatch: (patch: Partial<LoginMobileConfig>) => void
+  onUpdater: (fn: (m: LoginMobileConfig) => LoginMobileConfig) => void
+}) {
+  const set = onPatch
+  const setColor = (i: number, v: string) => onUpdater(m => ({
+    ...m,
+    gradientColors: m.gradientColors.map((c, j) => (j === i ? v : c)),
+  }))
+  const addColor = () => onUpdater(m => (
+    m.gradientColors.length >= 5 ? m : { ...m, gradientColors: [...m.gradientColors, DEFAULT_GRADIENT_COLORS[m.gradientColors.length % DEFAULT_GRADIENT_COLORS.length]] }
+  ))
+  const removeColor = (i: number) => onUpdater(m => (
+    m.gradientColors.length <= 2 ? m : { ...m, gradientColors: m.gradientColors.filter((_, j) => j !== i) }
+  ))
+
+  return (
+    <div className="rounded-xl border bg-card p-4 grid gap-4">
+      <div className="flex items-center gap-2 border-b pb-3">
+        <Smartphone className="h-4 w-4 text-emerald-700" aria-hidden />
+        <span className="text-sm font-bold">موبایل — پس‌زمینه گرادیانت متحرک</span>
+      </div>
+
+      <p className="text-xs text-muted-foreground leading-6">
+        در گوشی و تبلت (زایر عرض دسکتاپ) پشت کارت فرم، یک گرادیانت نرم و متحرک نمایش داده می‌شود؛
+        در دسکتاپ صفحه ورود مانند قبل است. اگر برای ستون فرم پس‌زمینه تصویری/ویدیویی تنظیم کرده باشید،
+        گرادیانت جای آن را نمی‌گیرد. با تنظیم «کاهش حرکت» در سیستم کاربر، انیمیشن خاموش و گرادیانت ثابت می‌شود.
+      </p>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <Switch
+          checked={mobile.gradientEnabled}
+          onCheckedChange={v => set({ gradientEnabled: v })}
+          aria-label="فعال بودن گرادیانت متحرک موبایل"
+        />
+        <span className="text-sm">
+          نمایش گرادیانت متحرک در موبایل
+          <span className="block text-[11px] text-muted-foreground mt-0.5">
+            خاموش بودن = پس‌زمینه سادهٔ قالب (مانند قبل)
+          </span>
+        </span>
+      </label>
+
+      <Field label="رنگ‌های گرادیانت" hint="۲ تا ۵ رنگ HEX — گرادیانت به‌ترتیب از رنگ اول تا آخر جابه‌جا می‌شود">
+        <div className="flex items-center gap-2 flex-wrap">
+          {mobile.gradientColors.map((c, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <input
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(c) ? c : '#000000'}
+                onChange={e => setColor(i, e.target.value)}
+                className="h-9 w-12 rounded-md border cursor-pointer bg-transparent p-1"
+                aria-label={`رنگ ${formatFaNumber(i + 1)} گرادیانت`}
+              />
+              {mobile.gradientColors.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => removeColor(i)}
+                  aria-label={`حذف رنگ ${formatFaNumber(i + 1)}`}
+                  className="grid place-items-center h-7 w-7 rounded-md border text-rose-600 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+          ))}
+          {mobile.gradientColors.length < 5 && (
+            <Button type="button" variant="outline" size="sm" onClick={addColor}>
+              <Plus className="h-4 w-4 ml-1" /> رنگ
+            </Button>
+          )}
+        </div>
+      </Field>
+
+      <Field label="پالت‌های آماده">
+        <div className="flex items-center gap-2 flex-wrap">
+          {GRADIENT_SWATCH_SETS.map((palette, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => set({ gradientColors: palette })}
+              aria-label={`پالت ${formatFaNumber(i + 1)}`}
+              className="h-8 w-16 rounded-md border overflow-hidden flex"
+            >
+              {palette.map(c => <span key={c} className="flex-1" style={{ backgroundColor: c }} />)}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label={`سرعت انیمیشن (${mobile.gradientSpeed} ثانیه در هر سیکل)`} hint="عدد بیشتر = حرکت آرام‌تر و سبک‌تر">
+        <Slider
+          value={[mobile.gradientSpeed]}
+          min={4} max={60} step={1}
+          onValueChange={([v]: number[]) => set({ gradientSpeed: v })}
+        />
+      </Field>
+
+      <Field label={`جهت حرکت گرادیانت (${mobile.gradientAngle} درجه)`} hint="۱۳۵ درجه = مورب از بالا به پایین؛ ۹۰ = عمودی؛ ۱۸۰ = افقی">
+        <Slider
+          value={[mobile.gradientAngle]}
+          min={0} max={360} step={5}
+          onValueChange={([v]: number[]) => set({ gradientAngle: v })}
+        />
+      </Field>
+
+      <Field label={`شدت گرادیانت (${mobile.gradientIntensity}٪)`} hint="شدت کمتر = رنگ‌ها ملایم‌تر روی پس‌زمینه قالب">
+        <Slider
+          value={[mobile.gradientIntensity]}
+          min={20} max={100} step={5}
+          onValueChange={([v]: number[]) => set({ gradientIntensity: v })}
+        />
+      </Field>
+
+      {/* پیش‌نمایش زنده — همان کلاس صفحه واقعی ورود با متغیرهای فعلی */}
+      <div className="grid gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">پیش‌نمایش (نسبت موبایل)</span>
+        <div className="relative h-28 w-full max-w-56 mx-auto rounded-xl border overflow-hidden bg-stone-100">
+          <div aria-hidden className="bwh-login-gradient" style={gradientVars(mobile)} />
+          <div className="absolute inset-x-6 inset-y-5 rounded-lg bg-card border shadow-sm grid place-items-center text-xs font-bold text-card-foreground">
+            کارت فرم
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LoginSettingsTab() {
   const { data, loading, reload } = useApiData<LoginConfig>('/api/login-settings')
   const [side, setSide] = useState<LoginSideConfig | null>(null)
   const [form, setForm] = useState<LoginFormConfig | null>(null)
+  const [mobile, setMobile] = useState<LoginMobileConfig | null>(null)
   const [itemsText, setItemsText] = useState('')
   const [uploading, setUploading] = useState<'side' | 'form' | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1463,6 +1616,7 @@ function LoginSettingsTab() {
     if (data) {
       setSide(data.side)
       setForm(data.form)
+      setMobile(data.mobile)
       setItemsText(data.side.items.join('\n'))
     }
   }, [data])
@@ -1470,11 +1624,13 @@ function LoginSettingsTab() {
   const upload = async (target: 'side' | 'form', file: File) => {
     setUploading(target)
     try {
+      // تصاویر شطرنجی بزرگ قبل از ارسال در مرورگر کوچک/WebP می‌شوند — سرور تبدیل نهایی را انجام می‌دهد
+      const optimized = await optimizeImageBeforeUpload(file)
+      const isVideo = optimized.type.startsWith('video/')
       const fd = new FormData()
       fd.append('kind', 'login')
-      fd.append('file', file)
+      fd.append('file', optimized)
       const res = await apiUpload<{ url: string }>('/api/uploads', fd)
-      const isVideo = file.type.startsWith('video/')
       if (target === 'side') {
         setSide(s => (s ? { ...s, bgKind: isVideo ? 'video' : 'image', bgUrl: res.url } : s))
       } else {
@@ -1492,9 +1648,13 @@ function LoginSettingsTab() {
   }
 
   const save = async () => {
-    if (!side || !form) return
+    if (!side || !form || !mobile) return
     if (!/^#[0-9a-fA-F]{6}$/.test(form.color)) {
       toast.error('رنگ کارت فرم معتبر نیست؛ از انتخابگر رنگ استفاده کنید')
+      return
+    }
+    if (mobile.gradientColors.length < 2 || mobile.gradientColors.some(c => !/^#[0-9a-fA-F]{6}$/.test(c))) {
+      toast.error('رنگ‌های گرادیانت موبایل معتبر نیستند؛ حداقل دو رنگ HEX معتبر لازم است')
       return
     }
     setBusy(true)
@@ -1505,6 +1665,7 @@ function LoginSettingsTab() {
           // bgUrl خالی به‌جای null — سرور فقط رشته می‌پذیرد
           side: { ...side, bgUrl: side.bgUrl ?? '', items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) },
           form: { ...form, bgUrl: form.bgUrl ?? '' },
+          mobile,
         }),
       })
       toast.success('تنظیمات صفحه ورود ذخیره شد')
@@ -1514,9 +1675,10 @@ function LoginSettingsTab() {
     } finally { setBusy(false) }
   }
 
-  const dirty = !!data && !!side && !!form && (
+  const dirty = !!data && !!side && !!form && !!mobile && (
     JSON.stringify({ ...side, items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) }) !== JSON.stringify(data.side) ||
-    JSON.stringify(form) !== JSON.stringify(data.form)
+    JSON.stringify(form) !== JSON.stringify(data.form) ||
+    JSON.stringify(mobile) !== JSON.stringify(data.mobile)
   )
 
   if (loading && !data) {
@@ -1530,8 +1692,9 @@ function LoginSettingsTab() {
           صفحه ورود دو ستون دارد: <b>ستون راست</b> معرفی و توضیحات و <b>ستون چپ</b> فرم ورود.
           برای هر ستون می‌توانید تصویر یا ویدیوی پس‌زمینه الصاق کنید، درصد تاریکی و رنگ متن را تنظیم کنید،
           رنگ/شفافیت/محو بودن کارت فرم را تغییر دهید و همه نوشته‌های بالای فرم، پایین فرم و ستون مقابل را ویرایش کنید.
+          در بخش «موبایل» نیز پس‌زمینه گرادیانت متحرک صفحه ورود در گوشی‌ها قابل سفارشی‌سازی است.
         </p>
-        <Button size="sm" onClick={save} disabled={busy || !side || !form}>
+        <Button size="sm" onClick={save} disabled={busy || !side || !form || !mobile}>
           {busy ? 'در حال ذخیره…' : dirty ? 'ذخیره تغییرات' : 'ذخیره'}
         </Button>
       </div>
@@ -1695,9 +1858,18 @@ function LoginSettingsTab() {
         </div>
       )}
 
+      {mobile && (
+        <MobileGradientSettings
+          mobile={mobile}
+          onPatch={patch => setMobile(m => (m ? { ...m, ...patch } : m))}
+          onUpdater={fn => setMobile(m => (m ? fn(m) : m))}
+        />
+      )}
+
       <div className="rounded-lg bg-stone-50 border p-3 text-[11px] text-muted-foreground leading-6">
         پس از ذخیره، صفحه ورود با تنظیمات جدید باز می‌شود (برای مشاهده، از حساب خارج شوید یا صفحه را در حالت خروج بازخوانی کنید).
         تصاویر تا ۸ و ویدیوها تا ۵۰ مگابایت پشتیبانی می‌شوند؛ ویدیوها بی‌صدا و به‌صورت خودکار و تکرارشونده پخش می‌شوند.
+        تصاویر شطرنجی به‌طور خودکار به WebP تبدیل می‌شوند (SVG، فایوآیکون و تصاویر متحرک دست‌نخورده می‌مانند).
       </div>
     </div>
   )

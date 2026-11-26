@@ -34,9 +34,10 @@ export async function POST(req: NextRequest) {
 
     if (kind === 'logo' || kind === 'favicon' || kind === 'banner') {
       // هویت وب‌سایت و بنرهای فروشگاه — فقط مدیر کل / آدمین
+      // فایوآیکون بدون تبدیل ذخیره می‌شود (سازگاری حداکثری مرورگرها)؛ بقیه به WebP تبدیل می‌شوند
       const user = await requirePerm(req, 'users.manage')
       if (!(file instanceof File)) throw new ApiError(400, 'NO_FILE', 'فایل تصویر ارسال نشده است')
-      const url = await saveUploadImage(file, kind === 'banner' ? 'banners' : 'site')
+      const url = await saveUploadImage(file, kind === 'banner' ? 'banners' : 'site', { convert: kind !== 'favicon' })
       await audit({
         userId: user.id, action: 'site.image.upload', entityType: 'Setting', entityId: `site.${kind}Url`,
         after: { url },
