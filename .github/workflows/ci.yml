@@ -1,11 +1,12 @@
-# CI پروژه Makan Store — اجرا روی هر push و pull request به main
+# CI پروژه Makan Store — اجرا روی push به main و شاخه‌های کاری feat/** و pull request به main
+# (گسترش trigger — بخش E فاز ۱: از این پس هر push روی شاخه‌های feat/** هم CI کامل می‌گیرد)
 # مراحل: نصب → typecheck → lint → تست واحد (بدون دیتابیس) → PostgreSQL موقت →
 #        تست یکپارچه → build → seed → سرور پروداکشن → تست دود (smoke.sh)
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
 
