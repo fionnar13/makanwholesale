@@ -14,7 +14,7 @@ export type SessionUserLike = {
 export type ViewKeyLike =
   | 'dashboard' | 'orders' | 'customers' | 'catalog' | 'storefront' | 'inventory' | 'suppliers'
   | 'finance' | 'returns' | 'visits' | 'reports' | 'messages' | 'users'
-  | 'territories' | 'audit' | 'visitor' | 'admin-data'
+  | 'territories' | 'audit' | 'visitor' | 'driver' | 'deliveries' | 'admin-data'
 
 export type ProductListItem = {
   id: string
