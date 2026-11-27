@@ -22,6 +22,7 @@ const { db } = await import('../../src/lib/db.ts')
 const { createOrder, transitionOrder } = await import('../../src/lib/orders.ts')
 const { receiveStock } = await import('../../src/lib/inventory.ts')
 const deliveriesRoute = await import('../../src/app/api/deliveries/route.ts')
+const deliveriesSummaryRoute = await import('../../src/app/api/deliveries/summary/route.ts')
 const deliveriesIdRoute = await import('../../src/app/api/deliveries/[id]/route.ts')
 const ordersIdRoute = await import('../../src/app/api/orders/[id]/route.ts')
 
@@ -67,6 +68,10 @@ async function callAction(token: string | null, id: string, body: unknown) {
 }
 async function callOrderAction(token: string | null, orderId: string, action: string) {
   const res = await ordersIdRoute.POST(apiReq(`/api/orders/${orderId}`, { method: 'POST', token, body: { action } }), idCtx(orderId))
+  return { status: res.status, body: await res.json() }
+}
+async function callSummary(token?: string | null, query = '') {
+  const res = await deliveriesSummaryRoute.GET(apiReq(`/api/deliveries/summary${query}`, { token }))
   return { status: res.status, body: await res.json() }
 }
 
@@ -141,7 +146,7 @@ before(async () => {
   // کاربر بی‌مجوز — نقش مدیر را می‌گیرد ولی مجوزها را از دست می‌دهیم (سطر نقش را حذف می‌کنیم)
   await db.userRole.deleteMany({ where: { userId: plainId } })
 
-  // کالا + واحد + قیمت DEFAULT + انبار پیش‌فرض + ۳۰۰ پایه موجودی
+  // کالا + واحد + قیمت DEFAULT + انبار پیش‌فرض + ۷۲۰ پایه موجودی (بخش E — ۵ سفارشِ بیشترِ خلاصهٔ داشبورد)
   const product = await db.product.create({
     data: { sku: `TST-API-${SFX}`, name: 'کالای تست API پخش', minOrderQtyBase: 1, orderMultipleBase: 1, isActive: true },
   })
@@ -156,7 +161,7 @@ before(async () => {
   let wh = await db.warehouse.findFirst({ where: { isDefault: true } })
   if (!wh) wh = await db.warehouse.create({ data: { code: `WH-API-${SFX}`, name: 'انبار تست API', isDefault: true } })
   await db.$transaction(tx => receiveStock(tx, {
-    productId, warehouseId: wh!.id, qtyBase: 300, lotNo: `LOT-API-${SFX}`,
+    productId, warehouseId: wh!.id, qtyBase: 720, lotNo: `LOT-API-${SFX}`,
   }, { refType: 'RECEIVE', refId: null, userId: managerId }))
 })
 
@@ -441,7 +446,7 @@ test('شلیک هم‌زمان دو complete — فقط یکی 200؛ دیگری 
 
   // خروج فیزیکی FEFO فقط یک‌بار — دو سفارش تحویل‌شده تا این‌جا (سفارش ۲ و سفارش ۵)
   const lot = await db.inventoryLot.findFirst({ where: { productId } })
-  assert.equal(lot!.remainingQtyBase, 300 - 48)
+  assert.equal(lot!.remainingQtyBase, 720 - 48)
 })
 
 // ═══ ۹) سفارش پیش‌پرداخت — ثبت پرداخت در محل ممنوع (ضد دوگانه‌ثبتی وجه) ═══
@@ -455,6 +460,8 @@ test('سفارش پیش‌پرداخت‌شده — complete با paymentMethod 
   const dup = await callAction(tokenDriver, aId, { action: 'complete', paymentMethod: 'CASH', paymentReference: 'REF-X' })
   assert.equal(dup.status, 400)
   assert.equal(dup.body.error.code, 'PAYMENT_ALREADY_SETTLED')
+  // بخش E — قرارداد خطا برای UI (دیالوگ پرداخت با همین code پیام هدفمند نشان می‌دهد و جزئیات را تازه می‌کند)
+  assert.match(dup.body.error.message, /تسویه/)
 
   // تحویل بدون پرداختِ مجدد — سفارش تا COMPLETED می‌رود و فاکتور PAID است (قاعدهٔ paidAt)
   const done = await callAction(tokenDriver, aId, { action: 'complete' })
@@ -469,7 +476,7 @@ test('سفارش پیش‌پرداخت‌شده — complete با paymentMethod 
 
   // خروج FEFO تجمعی — سه سفارش تحویل‌شده تا این نقطه (۲۴×۳)
   const lot = await db.inventoryLot.findFirst({ where: { productId } })
-  assert.equal(lot!.remainingQtyBase, 300 - 72)
+  assert.equal(lot!.remainingQtyBase, 720 - 72)
 })
 
 // ═══ ۱۰) بخش D — شبیه‌سازی رفتار دکمهٔ «ثبت تحویل» در اپ راننده (fetch تکراری با idempotencyKey) ═══
@@ -523,7 +530,7 @@ test('رفتار دکمهٔ ثبت تحویل — ارسال مجدد با هم�
 
   // خروج FEFO تجمعی — چهار سفارش تحویل‌شده تا این نقطه (۲۴×۴)
   const lot = await db.inventoryLot.findFirst({ where: { productId } })
-  assert.equal(lot!.remainingQtyBase, 300 - 96)
+  assert.equal(lot!.remainingQtyBase, 720 - 96)
 })
 
 // ═══ ۱۱) بخش D — فیلترهای از/تا و dateField و take در فهرست ═══
@@ -567,7 +574,149 @@ test('فیلتر دوره‌ای — from/to روی assignedAt پیش‌فرض؛
   assert.equal(limited.status, 200)
   assert.equal(limited.body.data.length, 1)
 
-  // خروج FEFO تجمعی — پنج سفارش تحویل‌شده تا پایان فایل (۲۴×۵)
+  // خروج FEFO تجمعی — پنج سفارش تحویل‌شده تا این نقطه (۲۴×۵؛ ادامه در تست‌های بخش E)
   const lot = await db.inventoryLot.findFirst({ where: { productId } })
-  assert.equal(lot!.remainingQtyBase, 300 - 120)
+  assert.equal(lot!.remainingQtyBase, 720 - 120)
+})
+
+// ═══ ۱۲) بخش E — خلاصهٔ داشبورد (summary) — شمارش دقیق با scope رانندهٔ اختصاصی + فیلتر دوره ═══
+test('خلاصهٔ داشبورد — pending/inProgress/تحویل امروز/مرجوعی امروز/اعتباری بی‌تسویه؛ بازهٔ آینده صفر؛ معکوس 400؛ مجوز', async () => {
+  // رانندهٔ اختصاصی برای این تست — scope شمارش‌ها دقیق و مصون از دادهٔ سایر تست‌ها/فایل‌ها
+  const drvRole = await db.role.findUnique({ where: { name: 'DRIVER' } })
+  const d3 = await db.user.create({
+    data: { phone: `0935${SFX.slice(-8)}`, name: 'راننده API ۳', passwordHash: 'test', phoneVerified: true },
+  })
+  createdUserIds.push(d3.id)
+  await db.userRole.create({ data: { userId: d3.id, roleId: drvRole!.id } })
+  const token3 = randomBytes(24).toString('hex')
+  await db.session.create({
+    data: { userId: d3.id, tokenHash: createHash('sha256').update(token3).digest('hex'), expiresAt: new Date(Date.now() + 3600_000), ip: 'test', userAgent: 'node-test' },
+  })
+
+  // پنج سناریو روی رانندهٔ ۳
+  const o1 = await createDispatchedOrder('11', 'CREDIT') // PENDING
+  await callCreate(tokenManager, { orderId: o1.orderId, deliveryUserId: d3.id })
+  const o2 = await createDispatchedOrder('12', 'CREDIT') // IN_PROGRESS
+  const a2 = await callCreate(tokenManager, { orderId: o2.orderId, deliveryUserId: d3.id })
+  await callAction(token3, a2.body.data.id, { action: 'start' })
+  const o3 = await createDispatchedOrder('13', 'CREDIT') // اعتباریِ پرداخت‌نشده — تحویل با وصول نقدی در محل → PAID امروز
+  const a3 = await callCreate(tokenManager, { orderId: o3.orderId, deliveryUserId: d3.id })
+  await callAction(token3, a3.body.data.id, { action: 'start' })
+  await callAction(token3, a3.body.data.id, { action: 'complete', paymentMethod: 'CASH', idempotencyKey: 'E-KEY-1' })
+  const o4 = await createDispatchedOrder('14', 'CREDIT') // تحویل اعتباری بی‌تسویه → DELIVERED
+  const a4 = await callCreate(tokenManager, { orderId: o4.orderId, deliveryUserId: d3.id })
+  await callAction(token3, a4.body.data.id, { action: 'start' })
+  await callAction(token3, a4.body.data.id, { action: 'complete', idempotencyKey: 'E-KEY-2' })
+  const o5 = await createDispatchedOrder('15', 'CREDIT') // مرجوعی امروز → RETURNED
+  const a5 = await callCreate(tokenManager, { orderId: o5.orderId, deliveryUserId: d3.id })
+  await callAction(token3, a5.body.data.id, { action: 'start' })
+  const ret = await callAction(token3, a5.body.data.id, { action: 'return', reason: 'DAMAGED', idempotencyKey: 'E-KEY-3' })
+  assert.equal(ret.status, 200)
+
+  // بازهٔ «امروزِ» کلاینت (±ساعت) — هر پنج شمارش دقیقاً یک
+  const winFrom = new Date(Date.now() - 3600_000).toISOString()
+  const winTo = new Date(Date.now() + 3600_000).toISOString()
+  const s = await callSummary(tokenManager, `?driverId=${d3.id}&from=${encodeURIComponent(winFrom)}&to=${encodeURIComponent(winTo)}`)
+  assert.equal(s.status, 200)
+  assert.equal(s.body.data.pending, 1)
+  assert.equal(s.body.data.inProgress, 1)
+  assert.equal(s.body.data.paidInPeriod, 1)
+  assert.equal(s.body.data.returnedInPeriod, 1)
+  assert.equal(s.body.data.creditUnpaid, 1)
+
+  // بازهٔ آیندهٔ دور — تحویل/مرجوعی دوره صفر؛ وضعیت‌های بدون تاریخ دست‌نخورده
+  const fut = await callSummary(tokenManager, `?driverId=${d3.id}&from=${encodeURIComponent(new Date(Date.now() + 86_400_000).toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 172_800_000).toISOString())}`)
+  assert.equal(fut.status, 200)
+  assert.equal(fut.body.data.paidInPeriod, 0)
+  assert.equal(fut.body.data.returnedInPeriod, 0)
+  assert.equal(fut.body.data.pending, 1)
+  assert.equal(fut.body.data.creditUnpaid, 1)
+
+  // بدون scope راننده — اعداد کلی (مصونیت از دادهٔ سایر تست‌ها با >=)
+  const all = await callSummary(tokenManager, `?from=${encodeURIComponent(winFrom)}&to=${encodeURIComponent(winTo)}`)
+  assert.equal(all.status, 200)
+  assert.ok(all.body.data.pending >= 1)
+  assert.ok(all.body.data.paidInPeriod >= 1)
+  assert.ok(all.body.data.creditUnpaid >= 1)
+
+  // بازهٔ معکوس → 400؛ بدون مجوز manage → 403؛ بدون نشست → 401
+  const inverted = await callSummary(tokenManager, `?from=${encodeURIComponent(winTo)}&to=${encodeURIComponent(winFrom)}`)
+  assert.equal(inverted.status, 400)
+  assert.equal(inverted.body.error.code, 'VALIDATION')
+  const forbidden = await callSummary(tokenDriver)
+  assert.equal(forbidden.status, 403)
+  const anon = await callSummary(null)
+  assert.equal(anon.status, 401)
+
+  // خروج FEFO تجمعی — هفت سفارش تحویل‌شده تا این نقطه (۲۴×۷؛ مرجوعی پیش از تحویل بود)
+  const lot = await db.inventoryLot.findFirst({ where: { productId } })
+  assert.equal(lot!.remainingQtyBase, 720 - 168)
+})
+
+// ═══ ۱۳) بخش E — گزارش «تحویل‌شده بدون تسویه» + ثبت پرداخت (markPaid) از داشبورد ═══
+test('گزارش تسویه — DELIVERED با payMethod CREDIT در فهرست مدیر؛ markPaid → خروج از گزارش و مأموریت PAID', async () => {
+  const o = await createDispatchedOrder('16', 'CREDIT')
+  const a = await callCreate(tokenManager, { orderId: o.orderId, deliveryUserId: driverId })
+  const aId = a.body.data.id
+  await callAction(tokenDriver, aId, { action: 'start' })
+  const done = await callAction(tokenDriver, aId, { action: 'complete', idempotencyKey: 'E-KEY-4' })
+  assert.equal(done.status, 200)
+  assert.equal(done.body.data.status, 'DELIVERED')
+
+  // ردیف گزارش: وضعیت مأموریت DELIVERED، سفارش CREDIT و پرداخت‌نشده، راننده ثبت‌شده، completedAt ست‌شده
+  const list = await callList(tokenManager, '?status=DELIVERED&take=500')
+  assert.equal(list.status, 200)
+  const row = list.body.data.find((x: { id: string }) => x.id === aId)
+  assert.ok(row, 'مأموریت تحویل‌شده باید در گزارش باشد')
+  assert.equal(row.order.payMethod, 'CREDIT')
+  assert.equal(row.driver.id, driverId)
+  assert.ok(row.completedAt)
+
+  // ثبت پرداخت از داشبورد — همان markPaid مصوب بخش C (سفارش DELIVERED → PAID؛ بستن نهایی با انبار)
+  const paid = await callOrderAction(tokenManager, o.orderId, 'markPaid')
+  assert.equal(paid.status, 200)
+  assert.equal(paid.body.data.status, 'PAID')
+
+  // خروج از گزارش + مأموریت PAID + تسویهٔ مالی دقیقاً یک‌بار
+  const after = await callList(tokenManager, '?status=DELIVERED&take=500')
+  assert.ok(!after.body.data.some((x: { id: string }) => x.id === aId))
+  const detail = await callDetail(tokenManager, aId)
+  assert.equal(detail.body.data.status, 'PAID')
+  assert.equal(await ledgerCount(o.customerId, 'INVOICE'), 1)
+  assert.equal(await ledgerCount(o.customerId, 'RECEIPT'), 1)
+
+  // خروج FEFO تجمعی — هشت سفارش تحویل‌شده تا پایان فایل (۲۴×۸)
+  const lot = await db.inventoryLot.findFirst({ where: { productId } })
+  assert.equal(lot!.remainingQtyBase, 720 - 192)
+})
+
+// ═══ ۱۴) بخش E — تخصیص مجدد پس از لغو ═══
+test('تخصیص مجدد — لغو، سفارش را DISPATCHED نگه می‌دارد؛ تخصیص به رانندهٔ دیگر 201؛ گارد مأموریت فعال 409', async () => {
+  const o = await createDispatchedOrder('17', 'CREDIT')
+  const a = await callCreate(tokenManager, { orderId: o.orderId, deliveryUserId: driverId })
+  const aId = a.body.data.id
+  await callAction(tokenDriver, aId, { action: 'start' })
+
+  // لغو توسط مدیر — سفارش در DISPATCHED می‌ماند (پیش‌نیاز تخصیص مجدد)
+  const cancel = await callAction(tokenManager, aId, { action: 'cancel', reason: 'راننده در دسترس نیست', idempotencyKey: 'E-KEY-5' })
+  assert.equal(cancel.status, 200)
+  assert.equal(cancel.body.data.status, 'CANCELLED')
+  const orderRow = await db.order.findUnique({ where: { id: o.orderId } })
+  assert.equal(orderRow!.status, 'DISPATCHED')
+
+  // تخصیص مجدد به رانندهٔ دوم — 201 و وضعیت PENDING
+  const re = await callCreate(tokenManager, { orderId: o.orderId, deliveryUserId: driver2Id, notes: 'تخصیص مجدد پس از لغو' })
+  assert.equal(re.status, 201)
+  const reId = re.body.data.id
+  const reDetail = await callDetail(tokenManager, reId)
+  assert.equal(reDetail.body.data.status, 'PENDING')
+
+  // مأموریت قدیمی همچنان CANCELLED — تاریخ حفظ می‌شود
+  const oldDetail = await callDetail(tokenManager, aId)
+  assert.equal(oldDetail.body.data.status, 'CANCELLED')
+
+  // گارد حداکثر یک مأموریت فعال — تخصیص سوم 409
+  const third = await callCreate(tokenManager, { orderId: o.orderId, deliveryUserId: driverId })
+  assert.equal(third.status, 409)
+  assert.equal(third.body.error.code, 'ASSIGNMENT_ACTIVE')
 })

@@ -78,3 +78,37 @@ export function actorRoleLabel(role?: string | null): string {
 export function isOnSpotPayment(method?: DriverPaymentMethod | string | null): boolean {
   return method != null && method !== 'CREDIT'
 }
+
+// ─── فیلترهای دورهٔ زمانی UI (بخش D تاریخچهٔ راننده / بخش E داشبورد مدیر) ───
+
+export type UiPeriod = 'TODAY' | 'WEEK' | 'MONTH' | 'ALL'
+
+/**
+ * بازهٔ زمانی دوره — مرزها به‌وقت محلی مرورگر محاسبه و به‌صورت ISO ارسال می‌شوند
+ * تا «امروز» و «این هفته» با تقویم خودِ کاربر (ایران) درست باشد؛ هفته از شنبه شروع می‌شود.
+ */
+export function periodRange(p: UiPeriod): { from?: string; to?: string } {
+  if (p === 'ALL') return {}
+  const now = new Date()
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  if (p === 'TODAY') {
+    return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(), to: endOfToday.toISOString() }
+  }
+  if (p === 'WEEK') {
+    const daysSinceSat = (now.getDay() + 1) % 7 // شنبه = روز شروع هفته
+    const saturday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceSat)
+    return { from: saturday.toISOString(), to: endOfToday.toISOString() }
+  }
+  return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to: endOfToday.toISOString() }
+}
+
+/** بازهٔ یک روز تقویمی (YYYY-MM-DD از input type=date) — ابتدای یا انتهای روز به‌وقت محلی */
+export function dayRange(dateStr: string, endOfDay = false): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+  if (!m) return null
+  const [, y, mo, d] = m
+  const dt = endOfDay
+    ? new Date(Number(y), Number(mo) - 1, Number(d), 23, 59, 59, 999)
+    : new Date(Number(y), Number(mo) - 1, Number(d))
+  return dt.toISOString()
+}

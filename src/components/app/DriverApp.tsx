@@ -10,8 +10,10 @@
 //
 // آفلاین: پیش از هر ارسال navigator.onLine چک می‌شود و خطای شبکه با پیام واضح نمایش داده می‌شود.
 import { useEffect, useMemo, useRef, useState } from 'react'
+// ApiClientError — برای تشخیص هدفمند خطای تسویهٔ هم‌زمان (PAYMENT_ALREADY_SETTLED) در دیالوگ پرداخت
 import {
-  apiFetch, useApiData, Money, JDate, PageHeader, Field, EmptyState, ErrorState, AssignmentStatusBadge, formatFaNumber,
+  apiFetch, useApiData, Money, JDate, PageHeader, Field, EmptyState, ErrorState, AssignmentStatusBadge,
+  formatFaNumber, ApiClientError,
 } from './kit'
 import type { SessionUserLike, ViewKeyLike } from './types'
 import { Button } from '@/components/ui/button'
@@ -26,6 +28,7 @@ import {
 import { toast } from 'sonner'
 import {
   ASSIGNMENT_STATUS_LABELS, DELIVERY_ASSIGNMENT_STATUSES, DRIVER_PAYMENT_LABELS, RETURN_REASON_LABELS,
+  periodRange, type UiPeriod,
 } from '@/lib/delivery-shared'
 import { PAY_METHOD_LABELS } from '@/lib/format'
 
@@ -406,7 +409,15 @@ function PaymentDialog({ assignmentId, detail, open, onOpenChange, onDone }: {
       onDone()
       onOpenChange(false)
     } catch (e) {
-      toast.error(errText(e))
+      // رقابت تسویهٔ هم‌زمان (مثلاً markPaid مالی در همین لحظه) — پیام هدفمند + تازه‌سازی جزئیات:
+      // در حالت عادی UI برای سفارش تسویه‌شده اصلاً انتخاب روش پرداخت نشان نمی‌دهد؛ این مسیر
+      // فقط برای بازهٔ کوتاه بین باز شدن دیالوگ و ثبت تسویهٔ هم‌زمان است.
+      if (e instanceof ApiClientError && e.code === 'PAYMENT_ALREADY_SETTLED') {
+        toast.error('این سفارش پیش‌تر تسویه شده است — نیازی به دریافت وجه نیست')
+        onDone() // جزئیات و فهرست تازه می‌شوند؛ دیالوگ باز می‌ماند و به حالت «تسویه‌شده» می‌رود
+      } else {
+        toast.error(errText(e))
+      }
     } finally {
       setBusy(false)
     }
@@ -553,32 +564,15 @@ function ReturnDialog({ assignmentId, open, onOpenChange, onDone }: {
 }
 
 // ═════════════════════════════ تب ۲ — تاریخچه (فیلتر وضعیت + دوره) ═════════════════════════════
+// periodRange مشترک از delivery-shared (بخش E — همان توابع برای داشبورد مدیر)
 
-type Period = 'TODAY' | 'WEEK' | 'MONTH' | 'ALL'
-
-/** بازهٔ زمانی دوره — مرزها به‌وقت محلی مرورگر محاسبه و به‌صورت ISO ارسال می‌شوند (هفته از شنبه) */
-function periodRange(p: Period): { from?: string; to?: string } {
-  if (p === 'ALL') return {}
-  const now = new Date()
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  if (p === 'TODAY') {
-    return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(), to: endOfToday.toISOString() }
-  }
-  if (p === 'WEEK') {
-    const daysSinceSat = (now.getDay() + 1) % 7 // شنبه = روز شروع هفته
-    const saturday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceSat)
-    return { from: saturday.toISOString(), to: endOfToday.toISOString() }
-  }
-  return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to: endOfToday.toISOString() }
-}
-
-const PERIODS: Array<[Period, string]> = [
+const PERIODS: Array<[UiPeriod, string]> = [
   ['TODAY', 'امروز'], ['WEEK', 'این هفته'], ['MONTH', 'این ماه'], ['ALL', 'همه'],
 ]
 
 function HistoryTab() {
   const [status, setStatus] = useState<string>('ALL')
-  const [period, setPeriod] = useState<Period>('TODAY')
+  const [period, setPeriod] = useState<UiPeriod>('TODAY')
 
   const url = useMemo(() => {
     const { from, to } = periodRange(period)
