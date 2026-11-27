@@ -58,9 +58,6 @@ const PERMISSIONS: Array<[string, string]> = [
   ['returns.view', 'مشاهده مرجوعی'],
   ['returns.manage', 'مدیریت و تأیید مرجوعی'],
   ['deliveries.manage', 'مدیریت ارسال و رانندگان'],
-  ['deliveries.view.own', 'مشاهده مأموریت‌های پخش خود'],
-  ['deliveries.complete', 'ثبت تحویل و دریافت وجه در مسیر پخش'],
-  ['deliveries.return', 'ثبت مرجوعی در مسیر پخش'],
   ['visits.view', 'مشاهده بازدیدها'],
   ['visits.manage', 'ثبت بازدید و حضور'],
   ['reports.view', 'مشاهده گزارش‌ها'],
@@ -80,7 +77,7 @@ const ROLE_PERMS: Record<string, string[]> = {
   VISITOR: ['dashboard.view','products.view','customers.view','orders.view','orders.create','inventory.view','visits.manage','visits.view','finance.receipts','messages.use'],
   ACCOUNTANT: ['dashboard.view','customers.view','orders.view','finance.view','finance.receipts','finance.payments','reports.view','messages.use'],
   DISPATCHER: ['dashboard.view','orders.view','inventory.view','inventory.issue','deliveries.manage','visits.view','messages.use'],
-  DRIVER: ['orders.view', 'messages.use', 'deliveries.view.own', 'deliveries.complete', 'deliveries.return'],
+  DRIVER: ['orders.view','messages.use'],
   SUPPORT: ['dashboard.view','customers.view','orders.view','products.view','messages.use','visits.view'],
   // کاربرانی که با حساب گوگل وارد می‌شوند — حداقل دسترسی: داشبورد، فروشگاه و سفارش‌ها
   ONLINE_USER: ['dashboard.view','products.view','orders.view','messages.use'],
