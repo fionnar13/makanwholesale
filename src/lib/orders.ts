@@ -4,7 +4,8 @@ import { db } from '@/lib/db'
 import { ApiError } from '@/lib/api'
 import { nextNumber } from '@/lib/numbering'
 import { resolveOrderPrices } from '@/lib/pricing'
-import { reserveStockAtomic, releaseStockAtomic, issueStockFEFO, customerBalance, checkLowStock } from '@/lib/inventory'
+import { reserveStockAtomic, releaseStockAtomic, customerBalance } from '@/lib/inventory'
+import { applyDeliveryEffects, notifyLowStockAfterDelivery } from '@/lib/delivery-effects'
 import { emitTelegramEvent } from '@/lib/integrations/telegram'
 import { audit } from '@/lib/audit'
 import { notifyPermissionCodes, notifyUser } from '@/lib/notify'
@@ -204,17 +205,23 @@ const TRANSITIONS: Record<string, ActionDef> = {
   confirm: { to: 'CONFIRMED', perm: 'orders.confirm', from: ['RESERVED'], note: 'تأیید سفارش' },
   reject: { to: 'REJECTED', perm: 'orders.confirm', from: ['SUBMITTED', 'RESERVED'], note: 'رد سفارش' },
   creditApprove: { to: 'CREDIT_APPROVED', perm: 'orders.creditApprove', from: ['CONFIRMED'], note: 'تأیید اعتبار' },
-  markPaid: { to: 'PAID', perm: 'finance.receipts', from: ['CONFIRMED', 'CREDIT_APPROVED'], note: 'ثبت پرداخت سفارش' },
+  markPaid: { to: 'PAID', perm: 'finance.receipts', from: ['CONFIRMED', 'CREDIT_APPROVED', 'DELIVERED'], note: 'ثبت پرداخت سفارش' },
   startPicking: { to: 'PICKING', perm: 'inventory.issue', from: ['PAID', 'CREDIT_APPROVED'], note: 'شروع آماده‌سازی' },
   readyForDispatch: { to: 'READY_FOR_DISPATCH', perm: 'inventory.issue', from: ['PICKING'], note: 'آماده‌سازی کامل شد' },
   dispatch: { to: 'DISPATCHED', perm: 'deliveries.manage', from: ['READY_FOR_DISPATCH'], requiresDriver: true, note: 'خروج از انبار و ارسال' },
   deliver: { to: 'DELIVERED', perm: 'inventory.issue', from: ['DISPATCHED'], note: 'تحویل به مشتری و خروج فیزیکی کالا' },
-  complete: { to: 'COMPLETED', perm: 'orders.confirm', from: ['DELIVERED'], note: 'بستن سفارش' },
+  complete: { to: 'COMPLETED', perm: 'orders.confirm', from: ['DELIVERED', 'PAID'], note: 'بستن سفارش' },
   cancel: {
     to: 'CANCELLED', perm: 'orders.cancel',
     from: ['SUBMITTED', 'RESERVED', 'CONFIRMED', 'CREDIT_APPROVED', 'PAID', 'PICKING', 'READY_FOR_DISPATCH'],
     note: 'لغو سفارش',
   },
+}
+
+// نقش مجری رویدادهای ماشین حالت (مصوبهٔ فاز ۰-③) — مسیر انبار=WAREHOUSE، راننده=DELIVERY (در deliveries.ts)،
+// رویدادهای خودکار=SYSTEM؛ اقدامات دفتری (تأیید/پرداخت/لغو/…) بدون نقش → در نمایش SYSTEM
+const ACTOR_ROLE_BY_ACTION: Partial<Record<string, 'WAREHOUSE' | 'DELIVERY'>> = {
+  dispatch: 'WAREHOUSE', deliver: 'WAREHOUSE', complete: 'WAREHOUSE',
 }
 
 export async function transitionOrder(
@@ -248,103 +255,109 @@ export async function transitionOrder(
   const warehouseId = await getDefaultWarehouseId(db)
   const reserveItems = order.items.map(i => ({ productId: i.productId, warehouseId, qtyBase: i.qtyBase }))
 
+  // گارد مسیر انبار (مصوبهٔ فاز ۱ — اصلاحیهٔ ۴): اگر مأموریت پخش «در جریان» (IN_PROGRESS) باشد،
+  // خروج فیزیکی از مسیر انبار مجاز نیست و تحویل باید توسط راننده ثبت شود.
+  // مأموریت PENDING قفل نمی‌کند — تخصیص ≠ شروع فیزیکی.
+  if (action === 'deliver') {
+    const activeAssignment = await db.deliveryAssignment.findFirst({
+      where: { orderId: order.id, status: 'IN_PROGRESS' },
+    })
+    if (activeAssignment) {
+      throw new ApiError(409, 'ACTIVE_DELIVERY_ASSIGNMENT',
+        'مأموریت پخش این سفارش در جریان است؛ تحویل باید از مسیر راننده ثبت شود',
+        { assignmentId: activeAssignment.id })
+    }
+  }
+
   await db.$transaction(async tx => {
     const now = new Date()
-    const data: Prisma.OrderUpdateInput = { status: def.to }
 
-    if (action === 'dispatch') {
-      data.dispatchedAt = now
-      if (opts.driverId) {
-        const driver = await tx.user.findUnique({ where: { id: opts.driverId } })
-        if (!driver) throw new ApiError(400, 'BAD_DRIVER', 'راننده معتبر نیست')
-        data.driverId = opts.driverId
-      }
-    }
-    if (action === 'deliver') data.deliveredAt = now
-    if (action === 'complete') data.completedAt = now
-    if (action === 'confirm') data.confirmedAt = now
-    if (action === 'markPaid') data.paidAt = now
-    if (action === 'cancel') data.cancelledAt = now
+    if (action === 'deliver') {
+      // نقطهٔ واحد تحویل — منطق مشترک مسیر انبار/راننده (src/lib/delivery-effects.ts):
+      // وضعیت → DELIVERED + رویداد (actorRole=WAREHOUSE) + خروج FEFO + فاکتور + Ledger INVOICE
+      await applyDeliveryEffects(tx, order.id, {
+        source: 'WAREHOUSE', actorRole: 'WAREHOUSE', userId: user.id,
+        note: opts.note ?? def.note,
+      })
+    } else {
+      const data: Prisma.OrderUpdateInput = { status: def.to }
 
-    await tx.order.update({ where: { id: order.id }, data })
-
-    await tx.orderStatusEvent.create({
-      data: {
-        orderId: order.id, fromStatus: order.status, toStatus: def.to,
-        userId: user.id, note: opts.note ?? def.note,
-      },
-    })
-
-    switch (action) {
-      case 'reject':
-      case 'cancel': {
-        // آزادسازی کنترل‌شده رزرو (اگر هنوز خروج فیزیکی نشده)
-        if (['SUBMITTED', 'RESERVED', 'CONFIRMED', 'CREDIT_APPROVED', 'PAID', 'PICKING', 'READY_FOR_DISPATCH'].includes(order.status)) {
-          await releaseStockAtomic(tx, reserveItems, {
-            refType: 'ORDER', refId: order.id, userId: user.id,
-            note: action === 'cancel' ? 'آزادسازی به دلیل لغو سفارش' : 'آزادسازی به دلیل رد سفارش',
-          })
+      if (action === 'dispatch') {
+        data.dispatchedAt = now
+        if (opts.driverId) {
+          const driver = await tx.user.findUnique({ where: { id: opts.driverId } })
+          if (!driver) throw new ApiError(400, 'BAD_DRIVER', 'راننده معتبر نیست')
+          data.driverId = opts.driverId
         }
-        // اگر پرداخت پیشین ثبت شده بود، سند اصلاحی منفی در Ledger ثبت شود
-        if (['PAID'].includes(order.status)) {
+      }
+      if (action === 'complete') data.completedAt = now
+      if (action === 'confirm') data.confirmedAt = now
+      if (action === 'markPaid') data.paidAt = now
+      if (action === 'cancel') data.cancelledAt = now
+
+      await tx.order.update({ where: { id: order.id }, data })
+
+      await tx.orderStatusEvent.create({
+        data: {
+          orderId: order.id, fromStatus: order.status, toStatus: def.to,
+          actorRole: ACTOR_ROLE_BY_ACTION[action] ?? null,
+          userId: user.id, note: opts.note ?? def.note,
+        },
+      })
+
+      switch (action) {
+        case 'reject':
+        case 'cancel': {
+          // آزادسازی کنترل‌شده رزرو (اگر هنوز خروج فیزیکی نشده)
+          if (['SUBMITTED', 'RESERVED', 'CONFIRMED', 'CREDIT_APPROVED', 'PAID', 'PICKING', 'READY_FOR_DISPATCH'].includes(order.status)) {
+            await releaseStockAtomic(tx, reserveItems, {
+              refType: 'ORDER', refId: order.id, userId: user.id,
+              note: action === 'cancel' ? 'آزادسازی به دلیل لغو سفارش' : 'آزادسازی به دلیل رد سفارش',
+            })
+          }
+          // اگر پرداخت پیشین ثبت شده بود، سند اصلاحی منفی در Ledger ثبت شود
+          if (['PAID'].includes(order.status)) {
+            await tx.customerLedger.create({
+              data: {
+                customerId: order.customerId, entryType: 'ADJUST',
+                amountRls: -order.totalRls,
+                refType: 'ORDER', refId: order.id,
+                description: `سند اصلاحی لغو سفارش ${order.orderNo}`,
+                userId: user.id,
+              },
+            })
+          }
+          break
+        }
+        case 'markPaid': {
+          // دریافت وجه سفارش — اصلاح دوگانه‌ثبتی (مصوبهٔ فاز ۱ — اصلاحیهٔ ۱):
+          //  • اگر فاکتور در لحظهٔ تحویل صادر شده و ISSUED است → فقط وضعیتش PAID می‌شود
+          //  • سند INVOICE هرگز این‌جا تکرار نمی‌شود (INVOICE فقط یک‌بار در تحویل ثبت شده)
+          //  • این‌جا فقط Receipt + سند RECEIPT ثبت می‌شود
+          const existingInvoice = await tx.invoice.findUnique({ where: { orderId: order.id } })
+          if (existingInvoice && existingInvoice.status === 'ISSUED') {
+            await tx.invoice.update({ where: { id: existingInvoice.id }, data: { status: 'PAID' } })
+          }
+          const receiptNo = await nextNumber(tx, 'RCP')
+          const receipt = await tx.receipt.create({
+            data: {
+              receiptNo, customerId: order.customerId, amountRls: order.totalRls,
+              method: order.payMethod === 'CASH' ? 'CASH' : 'TRANSFER',
+              userId: user.id,
+              note: `دریافت بابت سفارش ${order.orderNo}`,
+            },
+          })
           await tx.customerLedger.create({
             data: {
-              customerId: order.customerId, entryType: 'ADJUST',
+              customerId: order.customerId, entryType: 'RECEIPT',
               amountRls: -order.totalRls,
-              refType: 'ORDER', refId: order.id,
-              description: `سند اصلاحی لغو سفارش ${order.orderNo}`,
+              refType: 'RECEIPT', refId: receipt.id,
+              description: `دریافت ${receiptNo} بابت سفارش ${order.orderNo}`,
               userId: user.id,
             },
           })
+          break
         }
-        break
-      }
-      case 'markPaid': {
-        // دریافت وجه سفارش → Receipt + Ledger
-        const receiptNo = await nextNumber(tx, 'RCP')
-        const receipt = await tx.receipt.create({
-          data: {
-            receiptNo, customerId: order.customerId, amountRls: order.totalRls,
-            method: order.payMethod === 'CASH' ? 'CASH' : 'TRANSFER',
-            userId: user.id,
-            note: `دریافت بابت سفارش ${order.orderNo}`,
-          },
-        })
-        await tx.customerLedger.create({
-          data: {
-            customerId: order.customerId, entryType: 'RECEIPT',
-            amountRls: -order.totalRls,
-            refType: 'RECEIPT', refId: receipt.id,
-            description: `دریافت ${receiptNo} بابت سفارش ${order.orderNo}`,
-            userId: user.id,
-          },
-        })
-        break
-      }
-      case 'deliver': {
-        // نقطه واحد خروج فیزیکی کالا — FEFO + کاهش رزرو
-        await issueStockFEFO(tx, reserveItems, {
-          refType: 'ORDER', refId: order.id, userId: user.id,
-          note: `خروج فیزیکی بابت سفارش ${order.orderNo}`,
-        })
-        // صدور فاکتور + ثبت بدهی در دفتر مشتری
-        const invoiceNo = await nextNumber(tx, 'INV')
-        const invoice = await tx.invoice.create({
-          data: {
-            invoiceNo, orderId: order.id, customerId: order.customerId,
-            totalRls: order.totalRls, status: order.status === 'PAID' ? 'PAID' : 'ISSUED',
-          },
-        })
-        await tx.customerLedger.create({
-          data: {
-            customerId: order.customerId, entryType: 'INVOICE',
-            amountRls: order.totalRls,
-            refType: 'INVOICE', refId: invoice.id,
-            description: `فاکتور ${invoiceNo} بابت سفارش ${order.orderNo}`,
-            userId: user.id,
-          },
-        })
-        break
       }
     }
   })
@@ -355,23 +368,8 @@ export async function transitionOrder(
     before: { status: order.status }, after: { status: def.to }, ip,
   })
   if (def.to === 'DELIVERED') {
-    // هشدار کم‌موجودی پس از خروج فیزیکی
-    for (const it of order.items) {
-      const low = await checkLowStock(db, it.productId, warehouseId)
-      if (low) {
-        await notifyPermissionCodes(['inventory.receive', 'products.manage'], {
-          type: 'LOW_STOCK', title: 'هشدار کم‌موجودی',
-          body: `«${low.productName}» به نقطه سفارش رسید (قابل فروش: ${low.availableBase})`,
-          refType: 'PRODUCT', refId: low.productId,
-        })
-        // یکپارچه‌سازی‌ها — رویداد تلگرام کم‌موجودی
-        await emitTelegramEvent('LOW_STOCK', {
-          productName: low.productName,
-          available: low.availableBase,
-          reorderPoint: low.reorderPoint,
-        })
-      }
-    }
+    // هشدار کم‌موجودی پس از خروج فیزیکی — مشترک بین دو مسیر (انبار/راننده)
+    await notifyLowStockAfterDelivery(order.items, warehouseId)
   }
   if (order.visitorId && order.visitorId !== user.id) {
     await notifyUser(order.visitorId, {
