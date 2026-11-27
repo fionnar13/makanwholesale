@@ -121,10 +121,15 @@ export async function startAssignment(user: PermUser, assignmentId: string, ip?:
   }
 
   const updated = await db.$transaction(async tx => {
-    const u = await tx.deliveryAssignment.update({
-      where: { id: assignment.id },
+    // claim اتمیک (بخش C — idempotency): فقط از PENDING؛ تکرار/شلیک هم‌زمان فقط یک‌بار اثر می‌گذارد
+    const claimed = await tx.deliveryAssignment.updateMany({
+      where: { id: assignment.id, status: 'PENDING' },
       data: { status: 'IN_PROGRESS', startedAt: new Date() },
     })
+    if (claimed.count === 0) {
+      throw new ApiError(409, 'BAD_STATE', 'وضعیت مأموریت هم‌اکنون تغییر کرده است', { current: assignment.status })
+    }
+    const u = await tx.deliveryAssignment.findUniqueOrThrow({ where: { id: assignment.id } })
     // هم‌گام‌سازی رانندهٔ سفارش با مأموریتِ در جریان (مرجع عملیاتی، مأموریت است)
     await tx.order.update({ where: { id: assignment.orderId }, data: { driverId: assignment.deliveryUserId } })
     return u
@@ -190,8 +195,9 @@ export async function completeDelivery(
 
   const result = await db.$transaction(async tx => {
     // ۱) وضعیت مأموریت — PAID اگر وجه این‌جا یا پیش‌تر دریافت شده؛ DELIVERED برای اعتباری
-    const updated = await tx.deliveryAssignment.update({
-      where: { id: assignment.id },
+    // claim اتمیک (بخش C — idempotency): فقط از IN_PROGRESS؛ لغو/تکمیل هم‌زمان از این‌جا رد می‌شود
+    const claimed = await tx.deliveryAssignment.updateMany({
+      where: { id: assignment.id, status: 'IN_PROGRESS' },
       data: {
         status: (onSpot || alreadyPaid) ? 'PAID' : 'DELIVERED',
         paymentMethod: method,
@@ -200,6 +206,10 @@ export async function completeDelivery(
         completedAt: new Date(),
       },
     })
+    if (claimed.count === 0) {
+      throw new ApiError(409, 'BAD_STATE', 'وضعیت مأموریت هم‌اکنون تغییر کرده است', { current: assignment.status })
+    }
+    const updated = await tx.deliveryAssignment.findUniqueOrThrow({ where: { id: assignment.id } })
 
     // ۲) افکت‌های تحویل — نقطهٔ واحد مشترک (source: 'DRIVER') → DELIVERED + FEFO + فاکتور + Ledger INVOICE
     const effects = await applyDeliveryEffects(tx, order.id, {
@@ -310,6 +320,20 @@ export async function recordDeliveryReturn(
 
   const order = assignment.order
   const result = await db.$transaction(async tx => {
+    // claim اتمیک (بخش C — idempotency): فقط از IN_PROGRESS و پیش از ساخت سند مرجوعی؛
+    // تکرار/شلیک هم‌زمان یعنی درخواست مرجوعی تکراری ثبت نمی‌شود (کاهش در صورت شکست rollback می‌شود)
+    const claimed = await tx.deliveryAssignment.updateMany({
+      where: { id: assignment.id, status: 'IN_PROGRESS' },
+      data: {
+        status: 'RETURNED',
+        failureReason: input.reason,
+        notes: input.notes ?? assignment.notes,
+        completedAt: new Date(),
+      },
+    })
+    if (claimed.count === 0) {
+      throw new ApiError(409, 'BAD_STATE', 'وضعیت مأموریت هم‌اکنون تغییر کرده است', { current: assignment.status })
+    }
     // درخواست مرجوعی کل سفارش — اقلام با disposition=PENDING برای بررسی انبار (اصلاحیهٔ ۵)
     const returnNo = await nextNumber(tx, 'RET')
     const returnRequest = await tx.returnRequest.create({
@@ -328,15 +352,7 @@ export async function recordDeliveryReturn(
         disposition: 'PENDING',
       })),
     })
-    const updated = await tx.deliveryAssignment.update({
-      where: { id: assignment.id },
-      data: {
-        status: 'RETURNED',
-        failureReason: input.reason,
-        notes: input.notes ?? assignment.notes,
-        completedAt: new Date(),
-      },
-    })
+    const updated = await tx.deliveryAssignment.findUniqueOrThrow({ where: { id: assignment.id } })
     return { returnRequest, assignment: updated }
   })
 

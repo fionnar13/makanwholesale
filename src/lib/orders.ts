@@ -338,6 +338,12 @@ export async function transitionOrder(
           if (existingInvoice && existingInvoice.status === 'ISSUED') {
             await tx.invoice.update({ where: { id: existingInvoice.id }, data: { status: 'PAID' } })
           }
+          // سناریوی مصوب بخش C (PAID ← COMPLETED): مأموریت تحویل‌شدهٔ اعتباری همین سفارش با تسویه → PAID
+          // (فقط وضعیت DELIVERED هدف است؛ مأموریت‌های دیگر دست‌نخورده می‌مانند — پیش‌پرداخت از قبل PAID است)
+          await tx.deliveryAssignment.updateMany({
+            where: { orderId: order.id, status: 'DELIVERED' },
+            data: { status: 'PAID' },
+          }
           const receiptNo = await nextNumber(tx, 'RCP')
           const receipt = await tx.receipt.create({
             data: {

@@ -68,10 +68,16 @@ export async function applyDeliveryEffects(
   const now = new Date()
 
   // ۱) وضعیت سفارش + رویداد وضعیت — actorRole طبق مصوبهٔ فاز ۰ همیشه در کد پر می‌شود
-  await tx.order.update({
-    where: { id: order.id },
+  // گارد اتمیک claim (بخش C — idempotency): تحویل فقط از DISPATCHED ثبت می‌شود.
+  // UPDATE شرطی یعنی در تکرار/شلیک هم‌زمان فقط نخستین فراخوانی برنده است؛ فراخوانی دوم
+  // پس از آزاد شدن قفل ردیف، where دیگر تطابق ندارد → 409 — افکت‌ها هرگز دوبار اعمال نمی‌شوند.
+  const deliveryClaim = await tx.order.updateMany({
+    where: { id: order.id, status: 'DISPATCHED' },
     data: { status: 'DELIVERED', deliveredAt: now },
   })
+  if (deliveryClaim.count === 0) {
+    throw new ApiError(409, 'ALREADY_DELIVERED', 'این سفارش قبلاً تحویل ثبت شده است؛ امکان ثبت مجدد نیست')
+  }
   await tx.orderStatusEvent.create({
     data: {
       orderId: order.id, fromStatus: order.status, toStatus: 'DELIVERED',
