@@ -343,7 +343,7 @@ export async function transitionOrder(
           await tx.deliveryAssignment.updateMany({
             where: { orderId: order.id, status: 'DELIVERED' },
             data: { status: 'PAID' },
-          }
+          })
           const receiptNo = await nextNumber(tx, 'RCP')
           const receipt = await tx.receipt.create({
             data: {

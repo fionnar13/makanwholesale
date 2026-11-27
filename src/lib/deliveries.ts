@@ -192,6 +192,12 @@ export async function completeDelivery(
 
   const onSpot = isOnSpotPayment(method)
   const alreadyPaid = order.paidAt != null
+  // گارد تسویهٔ پیشین (بخش C — ضد دوگانه‌ثبتی وجه): سفارشِ تسویه‌شده پرداختِ در محل نمی‌پذیرد؛
+  // وگرنه رسید دوم بابت همان سفارش ثبت می‌شد. تحویل بدون پرداخت مجدد ادامه می‌یابد (paidAt → COMPLETED).
+  if (alreadyPaid && method != null && method !== 'CREDIT') {
+    throw new ApiError(400, 'PAYMENT_ALREADY_SETTLED',
+      'این سفارش پیش‌تر تسویه شده است؛ ثبت پرداخت در محل مجاز نیست')
+  }
 
   const result = await db.$transaction(async tx => {
     // ۱) وضعیت مأموریت — PAID اگر وجه این‌جا یا پیش‌تر دریافت شده؛ DELIVERED برای اعتباری
