@@ -65,6 +65,9 @@ jobs:
         run: npx prisma db push --skip-generate
 
       # تست‌های وابسته به دیتابیس (لایه AI، جریان سفارش ویزیتور)
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      
       - name: Integration tests
         run: npm run test:integration
 
