@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Bell, Building2, ClipboardList, FileClock, ImagePlus, LayoutDashboard, LogOut, Map, MessageSquare,
-  Menu, Package, Receipt, RotateCcw, Search, Store, Truck, UserCog, Warehouse, BarChart3, Smartphone, Database, Plug,
+  Menu, Package, Receipt, RotateCcw, Route, Search, Store, Truck, UserCog, Warehouse, BarChart3, Smartphone, Database, Plug, Bike,
 } from 'lucide-react'
 import { apiFetch, JDate, useApiData, StatusBadge, SiteIdentity, UserAvatar, LogoImg, SITE_CHANGED_EVENT } from './kit'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,8 @@ import AuditView from './AuditView'
 import AdminDataView from './AdminDataView'
 import IntegrationsView from './IntegrationsView'
 import VisitorApp from './VisitorApp'
+import DriverApp from './DriverApp'
+import DeliveriesView from './DeliveriesView'
 import StorefrontView from './StorefrontView'
 import ProfileAvatarDialog from './ProfileAvatarDialog'
 
@@ -50,7 +52,7 @@ export type SessionUser = {
 export type ViewKey =
   | 'dashboard' | 'orders' | 'customers' | 'catalog' | 'storefront' | 'inventory' | 'suppliers'
   | 'finance' | 'returns' | 'visits' | 'reports' | 'messages' | 'users'
-  | 'territories' | 'audit' | 'visitor' | 'admin-data' | 'integrations'
+  | 'territories' | 'audit' | 'visitor' | 'driver' | 'deliveries' | 'admin-data' | 'integrations'
 
 type NavItem = { key: ViewKey; label: string; icon: typeof Bell; perm?: string; roles?: string[]; tone?: keyof typeof ICON_TONE }
 
@@ -76,6 +78,8 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { key: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, perm: 'dashboard.view', tone: 'emerald' },
       { key: 'visitor', label: 'اپ ویزیتور', icon: Smartphone, roles: ['VISITOR'], tone: 'orange' },
+      { key: 'driver', label: 'اپ راننده', icon: Bike, perm: 'deliveries.view.own', tone: 'cyan' },
+      { key: 'deliveries', label: 'مأموریت‌های پخش', icon: Route, perm: 'deliveries.manage', tone: 'violet' },
       { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, perm: 'orders.view', tone: 'sky' },
       { key: 'visits', label: 'بازدیدها و حضور', icon: Map, perm: 'visits.view', tone: 'teal' },
       { key: 'returns', label: 'مرجوعی کالا', icon: RotateCcw, perm: 'returns.view', tone: 'rose' },
@@ -128,6 +132,8 @@ const VIEW_TITLES: Record<ViewKey, string> = {
   territories: 'مناطق فروش',
   audit: 'سوابق سیستم',
   visitor: 'اپ ویزیتور',
+  driver: 'اپ راننده',
+  deliveries: 'مأموریت‌های پخش',
   'admin-data': 'پنل مدیریت داده‌ها',
   integrations: 'تنظیمات یکپارچه‌سازی',
 }
@@ -167,10 +173,14 @@ export default function App() {
   const notifUrl = user ? `/api/notifications?take=12` : null
   const { data: notifData, reload: reloadNotif } = useApiData<{ items: NotifItem[]; unread: number }>(notifUrl)
 
-  // نمای اولیه — ویزیتورِ بدون مجوز تأیید، مستقیم وارد اپ موبایل می‌شود
+  // نمای اولیه — ویزیتورِ بدون مجوز تأیید مستقیم وارد اپ موبایل خودش می‌شود؛
+  // رانندهٔ بدون داشبورد هم مستقیم به اپ راننده می‌رود (الگوی همان بهینه‌سازی برای اپ موبایل)
   const resolveInitialView = useCallback((u: SessionUser): ViewKey => {
     const h = readHash()
-    return u.roles.includes('VISITOR') && !u.permissions.includes('orders.confirm') && h === 'dashboard' ? 'visitor' : h
+    if (h !== 'dashboard') return h
+    if (u.roles.includes('VISITOR') && !u.permissions.includes('orders.confirm')) return 'visitor'
+    if (u.roles.includes('DRIVER') && !u.permissions.includes('dashboard.view')) return 'driver'
+    return h
   }, [])
 
   useEffect(() => {
@@ -322,6 +332,8 @@ export default function App() {
       case 'admin-data': return <AdminDataView user={user} go={go} />
       case 'integrations': return <IntegrationsView user={user} />
       case 'visitor': return <VisitorApp user={user} go={go} />
+      case 'driver': return <DriverApp user={user} go={go} />
+      case 'deliveries': return <DeliveriesView user={user} />
       default: return <DashboardView user={user} go={go} />
     }
   }

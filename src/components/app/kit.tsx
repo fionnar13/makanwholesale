@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatFaNumber, formatToman, jalaliDate, jalaliDateTime, ORDER_STATUS_LABELS, STATUS_BADGE_CLASS } from '@/lib/format'
+import { ASSIGNMENT_STATUS_LABELS, ASSIGNMENT_STATUS_BADGE_CLASS } from '@/lib/delivery-shared'
 
 export { formatFaNumber, formatToman, jalaliDate, jalaliDateTime, ORDER_STATUS_LABELS, STATUS_BADGE_CLASS }
 
@@ -275,6 +276,15 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   return (
     <Badge className={`border-transparent ${STATUS_BADGE_CLASS[status] ?? 'bg-stone-200 text-stone-700'}`}>
       {label ?? ORDER_STATUS_LABELS[status] ?? status}
+    </Badge>
+  )
+}
+
+// نشان وضعیت مأموریت پخش — برچسب فارسی + رنگ اختصاصی (مشترک اپ راننده / نمای مدیر — بخش D)
+export function AssignmentStatusBadge({ status, label }: { status: string; label?: string }) {
+  return (
+    <Badge className={`border-transparent ${ASSIGNMENT_STATUS_BADGE_CLASS[status] ?? 'bg-stone-200 text-stone-700'}`}>
+      {label ?? ASSIGNMENT_STATUS_LABELS[status] ?? status}
     </Badge>
   )
 }

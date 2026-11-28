@@ -38,6 +38,8 @@ model User {
   messagesSent     Message[] @relation("MessageSender")
   messagesReceived Message[] @relation("MessageRecipient")
   auditLogs        AuditLog[]
+  deliveryAssignments     DeliveryAssignment[] @relation("DeliveryDriver")
+  deliveryAssignmentsMade DeliveryAssignment[] @relation("DeliveryAssigner")
 }
 
 model Role {
@@ -384,6 +386,7 @@ model Order {
   events     OrderStatusEvent[]
   invoice    Invoice?
   returns    ReturnRequest[]
+  deliveries DeliveryAssignment[]
 
   @@index([status, createdAt])
   @@index([customerId])
@@ -411,12 +414,42 @@ model OrderStatusEvent {
   orderId    String
   fromStatus String?
   toStatus   String
+  actorRole  String?   // WAREHOUSE | DELIVERY | SYSTEM — null فقط برای رویدادهای قدیمی (نمایش: SYSTEM)
   userId     String?
   note       String?
   createdAt  DateTime  @default(now())
   order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+// مأموریت پخش — هر سفارش می‌تواند چند مأموریت داشته باشد (مثل تلاش مجدد پس از مرجوعی)
+// اما در هر لحظه حداکثر یک مأموریت فعال (PENDING/IN_PROGRESS) مجاز است.
+// وضعیت سفارش همچنان از ماشین حالت اصلی (orders.ts) پیروی می‌کند؛
+// مأموریت فقط جریان پخش را دنبال می‌کند و مسیر انبار را فقط در IN_PROGRESS قفل می‌کند.
+model DeliveryAssignment {
+  id               String    @id @default(cuid())
+  orderId          String
+  deliveryUserId   String    // راننده/پخش‌کن
+  assignedById     String    // مدیر/مسئول ارسالِ تخصیص‌دهنده
+  status           String    @default("PENDING") // PENDING | IN_PROGRESS | DELIVERED | PAID | RETURNED | PARTIAL_RETURNED | CANCELLED
+  paymentMethod    String?   // CASH | CARD_TO_CARD | POS | CREDIT | OTHER — در لحظه ثبت تحویل
+  paymentReference String?   // شماره مرجع کارت‌به‌کارت/POS (اختیاری)
+  failureReason    String?   // کد دلیل مرجوعی: CUSTOMER_REFUSED | WRONG_ITEM | DAMAGED | NOT_PAID | OTHER — یا یادداشت لغو
+  notes            String?
+  assignedAt       DateTime  @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  order    Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver   User  @relation("DeliveryDriver", fields: [deliveryUserId], references: [id])
+  assigner User  @relation("DeliveryAssigner", fields: [assignedById], references: [id])
+
+  @@index([deliveryUserId, status])
+  @@index([orderId])
+  @@index([status, assignedAt])
 }
 
 // ───────────────────────────── Finance (Ledger-based) ────────────────────────
