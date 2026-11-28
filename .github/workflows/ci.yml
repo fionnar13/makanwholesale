@@ -67,7 +67,7 @@ jobs:
 
       # تست‌های وابسته به دیتابیس (لایه AI، جریان سفارش ویزیتور)
       
-        - name: Generate Prisma Client
+      - name: Generate Prisma Client
         run: npx prisma generate
       
       - name: Integration tests
